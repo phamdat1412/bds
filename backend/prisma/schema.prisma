@@ -1,0 +1,318 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+enum UserType {
+  customer
+  staff
+}
+
+enum UserStatus {
+  active
+  inactive
+  blocked
+}
+
+enum LeadStatus {
+  new
+  contacted
+  qualified
+  unqualified
+  converted
+  lost
+}
+
+enum ProjectStatus {
+  draft
+  published
+  hidden
+}
+
+enum PropertyType {
+  apartment
+  shophouse
+  townhouse
+  villa
+  land
+}
+
+enum InventoryStatus {
+  available
+  reserved
+  sold
+  hidden
+}
+
+enum ActivityType {
+  call
+  meeting
+  note
+  sms
+  email
+  zalo
+  visit
+}
+
+model User {
+  id           BigInt     @id @default(autoincrement()) @db.UnsignedBigInt
+  email        String?    @unique @db.VarChar(255)
+  phone        String?    @unique @db.VarChar(20)
+  passwordHash String     @map("password_hash") @db.VarChar(255)
+  userType     UserType   @map("user_type")
+  status       UserStatus @default(active)
+  lastLoginAt  DateTime?  @map("last_login_at")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  customerProfile   CustomerProfile?
+  roles             UserRole[]
+  createdLeads      Lead[]            @relation("LeadCreatedBy")
+  uploadedFiles     MediaFile[]
+  activities        Activity[]
+  leadAssignmentsTo LeadAssignment[]  @relation("LeadAssignedTo")
+  leadAssignmentsBy LeadAssignment[]  @relation("LeadAssignedBy")
+  bookmarks         ProjectBookmark[]
+  leadActivities    LeadActivity[]
+
+  @@map("users")
+}
+
+model Role {
+  id        BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  code      String   @unique @db.VarChar(50)
+  name      String   @db.VarChar(100)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  users UserRole[]
+
+  @@map("roles")
+}
+
+model UserRole {
+  id        BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  userId    BigInt   @map("user_id") @db.UnsignedBigInt
+  roleId    BigInt   @map("role_id") @db.UnsignedBigInt
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
+  @@map("user_roles")
+}
+
+model CustomerProfile {
+  id        BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  userId    BigInt    @unique @map("user_id") @db.UnsignedBigInt
+  fullName  String    @map("full_name") @db.VarChar(150)
+  gender    String?   @db.VarChar(20)
+  birthday  DateTime? @db.Date
+  province  String?   @db.VarChar(100)
+  source    String?   @db.VarChar(100)
+  note      String?   @db.Text
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  leads      Lead[]
+  activities Activity[]
+
+  @@map("customer_profiles")
+}
+
+model Project {
+  id               BigInt        @id @default(autoincrement()) @db.UnsignedBigInt
+  name             String        @db.VarChar(255)
+  slug             String        @unique @db.VarChar(255)
+  developerName    String?       @map("developer_name") @db.VarChar(255)
+  locationText     String?       @map("location_text") @db.VarChar(255)
+  city             String?       @db.VarChar(100)
+  district         String?       @db.VarChar(100)
+  projectType      String?       @map("project_type") @db.VarChar(100)
+  status           ProjectStatus @default(draft)
+  thumbnailMediaId BigInt?       @map("thumbnail_media_id") @db.UnsignedBigInt
+  shortDescription String?       @map("short_description") @db.Text
+  description      String?       @db.LongText
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+
+  thumbnailMedia MediaFile?        @relation("ProjectThumbnail", fields: [thumbnailMediaId], references: [id], onDelete: SetNull)
+  properties     Property[]
+  leads          Lead[]
+  bookmarks      ProjectBookmark[]
+
+  @@map("projects")
+}
+
+model Property {
+  id              BigInt          @id @default(autoincrement()) @db.UnsignedBigInt
+  projectId       BigInt          @map("project_id") @db.UnsignedBigInt
+  code            String          @db.VarChar(100)
+  title           String          @db.VarChar(255)
+  propertyType    PropertyType    @map("property_type")
+  blockName       String?         @map("block_name") @db.VarChar(100)
+  floorNo         Int?            @map("floor_no")
+  bedroomCount    Int?            @map("bedroom_count")
+  bathroomCount   Int?            @map("bathroom_count")
+  areaGross       Decimal?        @map("area_gross") @db.Decimal(10, 2)
+  areaNet         Decimal?        @map("area_net") @db.Decimal(10, 2)
+  price           Decimal?        @db.Decimal(18, 2)
+  currency        String          @default("VND") @db.VarChar(10)
+  inventoryStatus InventoryStatus @default(available) @map("inventory_status")
+  orientation     String?         @db.VarChar(50)
+  legalStatus     String?         @map("legal_status") @db.VarChar(100)
+  description     String?         @db.Text
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+
+  project Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  images  PropertyImage[]
+
+  @@unique([projectId, code])
+  @@map("properties")
+}
+
+model Lead {
+  id                  BigInt     @id @default(autoincrement()) @db.UnsignedBigInt
+  fullName            String     @map("full_name") @db.VarChar(150)
+  phone               String     @db.VarChar(20)
+  email               String?    @db.VarChar(255)
+  source              String?    @db.VarChar(100)
+  channel             String?    @db.VarChar(100)
+  status              LeadStatus @default(new)
+  note                String?    @db.Text
+  interestedProjectId BigInt?    @map("interested_project_id") @db.UnsignedBigInt
+  customerProfileId   BigInt?    @map("customer_profile_id") @db.UnsignedBigInt
+  createdByUserId     BigInt?    @map("created_by_user_id") @db.UnsignedBigInt
+  createdAt           DateTime   @default(now()) @map("created_at")
+  updatedAt           DateTime   @updatedAt @map("updated_at")
+
+  interestedProject Project?         @relation(fields: [interestedProjectId], references: [id], onDelete: SetNull)
+  customerProfile   CustomerProfile? @relation(fields: [customerProfileId], references: [id], onDelete: SetNull)
+  createdByUser     User?            @relation("LeadCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  assignments       LeadAssignment[]
+  activities        Activity[]
+  leadActivities    LeadActivity[]
+
+  @@map("leads")
+}
+
+model LeadAssignment {
+  id               BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  leadId           BigInt   @map("lead_id") @db.UnsignedBigInt
+  assignedToUserId BigInt   @map("assigned_to_user_id") @db.UnsignedBigInt
+  assignedByUserId BigInt?  @map("assigned_by_user_id") @db.UnsignedBigInt
+  assignedAt       DateTime @map("assigned_at")
+  note             String?  @db.Text
+
+  lead           Lead  @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  assignedToUser User  @relation("LeadAssignedTo", fields: [assignedToUserId], references: [id], onDelete: Cascade)
+  assignedByUser User? @relation("LeadAssignedBy", fields: [assignedByUserId], references: [id], onDelete: SetNull)
+
+  @@map("lead_assignments")
+}
+
+model Activity {
+  id                BigInt       @id @default(autoincrement()) @db.UnsignedBigInt
+  leadId            BigInt?      @map("lead_id") @db.UnsignedBigInt
+  customerProfileId BigInt?      @map("customer_profile_id") @db.UnsignedBigInt
+  userId            BigInt       @map("user_id") @db.UnsignedBigInt
+  activityType      ActivityType @map("activity_type")
+  content           String       @db.Text
+  activityAt        DateTime     @map("activity_at")
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+
+  lead            Lead?            @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  customerProfile CustomerProfile? @relation(fields: [customerProfileId], references: [id], onDelete: SetNull)
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("activities")
+}
+
+model MediaFile {
+  id               BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  disk             String   @db.VarChar(50)
+  fileName         String   @map("file_name") @db.VarChar(255)
+  originalName     String   @map("original_name") @db.VarChar(255)
+  mimeType         String   @map("mime_type") @db.VarChar(100)
+  extension        String?  @db.VarChar(20)
+  sizeBytes        BigInt   @map("size_bytes") @db.UnsignedBigInt
+  pathKey          String   @map("path_key") @db.VarChar(500)
+  url              String   @db.VarChar(1000)
+  uploadedByUserId BigInt?  @map("uploaded_by_user_id") @db.UnsignedBigInt
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  uploadedByUser   User?           @relation(fields: [uploadedByUserId], references: [id], onDelete: SetNull)
+  projectThumbnail Project[]       @relation("ProjectThumbnail")
+  propertyImages   PropertyImage[]
+  newsThumbnails   News[]          @relation("NewsThumbnail")
+
+  @@map("media_files")
+}
+
+model PropertyImage {
+  id          BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  propertyId  BigInt   @map("property_id") @db.UnsignedBigInt
+  mediaFileId BigInt   @map("media_file_id") @db.UnsignedBigInt
+  sortOrder   Int      @default(0) @map("sort_order")
+  isPrimary   Boolean  @default(false) @map("is_primary")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  property  Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  mediaFile MediaFile @relation(fields: [mediaFileId], references: [id], onDelete: Cascade)
+
+  @@map("property_images")
+}
+
+model News {
+  id               BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  title            String    @db.VarChar(255)
+  slug             String    @unique @db.VarChar(255)
+  summary          String?   @db.Text
+  content          String?   @db.LongText
+  thumbnailMediaId BigInt?   @map("thumbnail_media_id") @db.UnsignedBigInt
+  status           String    @default("draft")
+  publishedAt      DateTime? @map("published_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  thumbnailMedia MediaFile? @relation("NewsThumbnail", fields: [thumbnailMediaId], references: [id], onDelete: SetNull)
+
+  @@map("news")
+}
+
+model ProjectBookmark {
+  id        BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  userId    BigInt   @map("user_id") @db.UnsignedBigInt
+  projectId BigInt   @map("project_id") @db.UnsignedBigInt
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, projectId])
+  @@map("project_bookmarks")
+}
+
+model LeadActivity {
+  id              BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  leadId          BigInt   @map("lead_id") @db.UnsignedBigInt
+  createdByUserId BigInt   @map("created_by_user_id") @db.UnsignedBigInt
+  activityType    String   @map("activity_type") @db.VarChar(100)
+  note            String?  @db.Text
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  lead          Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  createdByUser User @relation(fields: [createdByUserId], references: [id], onDelete: Cascade)
+
+  @@map("lead_activities")
+}
