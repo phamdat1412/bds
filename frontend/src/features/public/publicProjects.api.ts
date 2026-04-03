@@ -1,3 +1,4 @@
+// path: frontend/src/features/public/publicProjects.api.ts
 import api from "../../services/api";
 
 export type PublicProjectItem = {
@@ -49,20 +50,47 @@ export type PublicProjectDetail = PublicProjectItem & {
   }>;
 };
 
-export async function getPublicProjectsApi() {
-  const response = await api.get("/public/projects");
-  return response.data as {
-    success: boolean;
-    message: string;
-    data: PublicProjectItem[];
-  };
+export type PublicProjectQuery = {
+  keyword?: string;
+  city?: string;
+  district?: string;
+  projectType?: string;
+  minPrice?: string;
+  maxPrice?: string;
+  minArea?: string;
+  maxArea?: string;
+  page?: number;
+  pageSize?: number;
+};
+
+export async function getPublicProjectsApi(params?: PublicProjectQuery) {
+  const response = await api.get("/public/projects", { params });
+  return response.data;
 }
 
 export async function getPublicProjectDetailApi(slug: string) {
   const response = await api.get(`/public/projects/${slug}`);
+  return response.data;
+}
+
+export async function getPublicLocationsApi() {
+  const response = await api.get("/public/projects/locations");
+  return response.data;
+}
+// path: frontend/src/features/public/publicProjects.api.ts
+
+// ... (giữ các hàm cũ)
+
+export async function getSearchSuggestionsApi(keyword: string) {
+  // Gọi API lấy gợi ý nhanh cho cả Projects và Properties
+  const response = await api.get("/public/search/suggestions", { 
+    params: { keyword, limit: 5 } 
+  });
   return response.data as {
     success: boolean;
-    message: string;
-    data: PublicProjectDetail;
+    data: {
+      projects: Array<{ id: string; name: string; slug: string; type: 'project' }>;
+      properties: Array<{ id: string; title: string; id_property: string; type: 'property' }>;
+    };
   };
 }

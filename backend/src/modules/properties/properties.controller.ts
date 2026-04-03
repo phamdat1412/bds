@@ -4,6 +4,7 @@ import {
   createProperty,
   deleteProperty,
   getPropertyDetail,
+  getPublicPropertyDetail,
   listProperties,
   updateInventoryStatus,
   updateProperty,
@@ -139,6 +140,25 @@ export async function getPropertyDetailHandler(
     return res.json({
       success: true,
       message: "Property detail fetched successfully",
+      data,
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function getPublicPropertyDetailHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    const propertyId = getParamAsString(req.params.id);
+    const data = await getPublicPropertyDetail(propertyId);
+
+    return res.json({
+      success: true,
+      message: "Public property detail fetched successfully",
       data,
     });
   } catch (error) {

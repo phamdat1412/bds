@@ -1,16 +1,24 @@
-import { Link, Outlet, useLocation } from "react-router-dom";
+// path: frontend/src/components/layout/PublicLayout.tsx
+import { useState } from "react";
+import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../app/AuthContext";
 import UserMenu from "../common/UserMenu";
+import { useCart } from "../../features/cart/cart.store";
 
 export default function PublicLayout() {
-  const { isAuthenticated, roles } = useAuth();
+  const { isAuthenticated } = useAuth();
+  const { items } = useCart();
   const location = useLocation();
+  const navigate = useNavigate();
+  const [globalKeyword, setGlobalKeyword] = useState("");
 
-  const dashboardLink = roles.includes("admin")
-    ? "/admin/dashboard"
-    : roles.includes("seller")
-    ? "/seller/dashboard"
-    : "/user";
+  const handleGlobalSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (globalKeyword.trim()) {
+      navigate(`/projects?keyword=${encodeURIComponent(globalKeyword.trim())}`);
+      setGlobalKeyword(""); 
+    }
+  };
 
   function isActive(path: string) {
     if (path === "/") return location.pathname === "/";
@@ -21,6 +29,7 @@ export default function PublicLayout() {
     <div style={styles.page}>
       <header style={styles.header}>
         <div style={styles.headerInner}>
+          {/* 1. Logo */}
           <div style={styles.leftGroup}>
             <Link to="/" style={styles.brand}>
               <div style={styles.brandMark}>S</div>
@@ -28,56 +37,46 @@ export default function PublicLayout() {
             </Link>
           </div>
 
-          <nav style={styles.nav}>
-            <Link
-              to="/"
-              style={{
-                ...styles.link,
-                ...(isActive("/") ? styles.linkActive : {}),
-              }}
-            >
-              Trang chủ
-            </Link>
+          {/* 2. Thanh tìm kiếm toàn cục */}
+          <form onSubmit={handleGlobalSearch} style={styles.searchBar}>
+            <input
+              placeholder="Tìm dự án, khu vực..."
+              value={globalKeyword}
+              onChange={(e) => setGlobalKeyword(e.target.value)}
+              style={styles.searchInput}
+            />
+            <button type="submit" style={styles.searchButton}>🔍</button>
+          </form>
 
-            <Link
-              to="/projects"
-              style={{
-                ...styles.link,
-                ...(isActive("/projects") ? styles.linkActive : {}),
-              }}
-            >
+          {/* 3. Menu điều hướng chính */}
+          <nav style={styles.nav}>
+            {/* <Link to="/" style={{ ...styles.link, ...(isActive("/") ? styles.linkActive : {}) }}>
+              Trang chủ
+            </Link> */}
+            <Link to="/projects" style={{ ...styles.link, ...(isActive("/projects") ? styles.linkActive : {}) }}>
               Dự án
             </Link>
-
-            <Link
-              to="/news"
-              style={{
-                ...styles.link,
-                ...(isActive("/news") ? styles.linkActive : {}),
-              }}
-            >
+            {/* Đã khôi phục lại Tin tức & Sự kiện */}
+            <Link to="/news" style={{ ...styles.link, ...(isActive("/news") ? styles.linkActive : {}) }}>
               Tin tức & sự kiện
             </Link>
+            
+            {/* Biểu tượng Giỏ hàng */}
+            <Link to="/cart" style={styles.cartLink}>
+              <span style={{fontSize: 22}}>🛒</span>
+              {items.length > 0 && <span style={styles.badge}>{items.length}</span>}
+            </Link>
 
+            {/* Cụm User/Auth */}
             {isAuthenticated ? (
-              <Link to={dashboardLink} style={styles.link}>
-                Quản lý thông tin
-              </Link>
+              <UserMenu /> 
             ) : (
-              <>
-                <Link to="/login" style={styles.link}>
-                  Đăng nhập
-                </Link>
-                <Link to="/register" style={styles.ctaLink}>
-                  Đăng ký
-                </Link>
-              </>
+              <div style={styles.authGroup}>
+                <Link to="/login" style={styles.link}>Đăng nhập</Link>
+                <Link to="/register" style={styles.ctaLink}>Đăng ký</Link>
+              </div>
             )}
           </nav>
-
-          <div style={styles.rightGroup}>
-            {isAuthenticated ? <UserMenu /> : null}
-          </div>
         </div>
       </header>
 
@@ -89,7 +88,7 @@ export default function PublicLayout() {
         <div style={styles.footerInner}>
           <div style={styles.footerBrand}>SGROUP</div>
           <div style={styles.footerText}>
-            Nền tảng tra cứu dự án, cập nhật tin tức và kết nối tư vấn bất động sản.
+            Nền tảng tra cứu dự án, cập nhật tin tức và kết nối tư vấn bất động sản chuyên nghiệp.
           </div>
         </div>
       </footer>
@@ -98,128 +97,85 @@ export default function PublicLayout() {
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  page: {
-    minHeight: "100vh",
-    background: "#f6f6f6",
-    color: "#111111",
+  page: { minHeight: "100vh", background: "#f6f6f6", color: "#111111" },
+  header: { 
+    position: "sticky", 
+    top: 0, 
+    zIndex: 50, 
+    background: "rgba(255,255,255,0.95)", 
+    backdropFilter: "blur(10px)", 
+    borderBottom: "1px solid #ececec" 
   },
-
-  header: {
-    position: "sticky",
-    top: 0,
-    zIndex: 50,
-    background: "rgba(255,255,255,0.92)",
-    backdropFilter: "blur(14px)",
-    borderBottom: "1px solid #ececec",
+  headerInner: { 
+    maxWidth: 1320, 
+    margin: "0 auto", 
+    padding: "0 20px", 
+    minHeight: 84, 
+    display: "flex", 
+    alignItems: "center", 
+    justifyContent: "space-between", 
+    gap: 20 
   },
-
-  headerInner: {
-    maxWidth: 1320,
-    margin: "0 auto",
-    padding: "0 20px",
-    minHeight: 84,
-    display: "grid",
-    gridTemplateColumns: "220px 1fr 220px",
-    alignItems: "center",
-    gap: 16,
+  leftGroup: { display: "flex", alignItems: "center" },
+  brand: { display: "inline-flex", alignItems: "center", gap: 10, textDecoration: "none" },
+  brandMark: { 
+    width: 38, 
+    height: 38, 
+    borderRadius: 12, 
+    background: "#cf2027", 
+    color: "#fff", 
+    display: "grid", 
+    placeItems: "center", 
+    fontWeight: 800, 
+    fontSize: 18 
   },
-
-  leftGroup: {
-    display: "flex",
-    alignItems: "center",
+  brandText: { fontSize: 24, fontWeight: 800, color: "#cf2027", letterSpacing: 0.5 },
+  searchBar: { 
+    flex: 1, 
+    maxWidth: 320, 
+    display: "flex", 
+    background: "#f1f1f1", 
+    borderRadius: 99, 
+    padding: "4px 16px", 
+    border: "1px solid #eee" 
   },
-
-  brand: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 10,
-    textDecoration: "none",
-    color: "#111111",
+  searchInput: { 
+    flex: 1, 
+    border: "none", 
+    background: "transparent", 
+    padding: "8px", 
+    outline: "none", 
+    fontSize: 14 
   },
-
-  brandMark: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    background: "linear-gradient(135deg, #cf2027 0%, #991b1b 100%)",
-    color: "#ffffff",
-    display: "grid",
-    placeItems: "center",
-    fontWeight: 800,
-    fontSize: 18,
-    boxShadow: "0 10px 24px rgba(185,28,28,0.18)",
+  searchButton: { border: "none", background: "transparent", cursor: "pointer", fontSize: 16 },
+  nav: { display: "flex", alignItems: "center", gap: 24 },
+  link: { textDecoration: "none", color: "#2d2d2d", fontSize: 15, fontWeight: 600 },
+  linkActive: { color: "#cf2027" },
+  cartLink: { position: "relative", textDecoration: "none" },
+  badge: { 
+    position: "absolute", 
+    top: -8, 
+    right: -10, 
+    background: "#cf2027", 
+    color: "#fff", 
+    fontSize: 10, 
+    padding: "2px 6px", 
+    borderRadius: 10, 
+    fontWeight: "bold" 
   },
-
-  brandText: {
-    fontSize: 28,
-    fontWeight: 800,
-    color: "#cf2027",
-    letterSpacing: 0.6,
+  authGroup: { display: "flex", alignItems: "center", gap: 16 },
+  ctaLink: { 
+    textDecoration: "none", 
+    color: "#fff", 
+    background: "#cf2027", 
+    padding: "10px 20px", 
+    borderRadius: 99, 
+    fontWeight: 700, 
+    fontSize: 14 
   },
-
-  nav: {
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 28,
-    flexWrap: "wrap",
-  },
-
-  link: {
-    textDecoration: "none",
-    color: "#2d2d2d",
-    fontSize: 15,
-    fontWeight: 600,
-    padding: "10px 0",
-  },
-
-  linkActive: {
-    color: "#cf2027",
-  },
-
-  ctaLink: {
-    textDecoration: "none",
-    color: "#ffffff",
-    background: "#cf2027",
-    padding: "12px 18px",
-    borderRadius: 999,
-    fontWeight: 700,
-    fontSize: 14,
-    boxShadow: "0 10px 24px rgba(185,28,28,0.16)",
-  },
-
-  rightGroup: {
-    display: "flex",
-    justifyContent: "flex-end",
-    alignItems: "center",
-  },
-
-  main: {
-    minHeight: "calc(100vh - 84px - 90px)",
-  },
-
-  footer: {
-    borderTop: "1px solid #ececec",
-    background: "#ffffff",
-  },
-
-  footerInner: {
-    maxWidth: 1320,
-    margin: "0 auto",
-    padding: "24px 20px 32px",
-    display: "grid",
-    gap: 8,
-  },
-
-  footerBrand: {
-    fontSize: 22,
-    fontWeight: 800,
-    color: "#cf2027",
-  },
-
-  footerText: {
-    fontSize: 14,
-    lineHeight: 1.7,
-    color: "#666666",
-  },
+  main: { minHeight: "calc(100vh - 84px - 140px)" },
+  footer: { borderTop: "1px solid #ececec", background: "#fff", padding: "32px 0" },
+  footerInner: { maxWidth: 1320, margin: "0 auto", padding: "0 20px", display: "grid", gap: 8 },
+  footerBrand: { fontSize: 20, fontWeight: 800, color: "#cf2027" },
+  footerText: { fontSize: 14, color: "#666", lineHeight: 1.6 },
 };

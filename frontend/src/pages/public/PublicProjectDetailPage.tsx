@@ -1,338 +1,128 @@
-import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
-import {
-  getPublicProjectDetailApi,
-  type PublicProjectDetail,
+// path: frontend/src/pages/public/PublicProjectDetailPage.tsx
+import { useEffect, useState, type CSSProperties } from "react";
+import { useParams, Link } from "react-router-dom";
+import { 
+  getPublicProjectDetailApi, 
+  type PublicProjectDetail 
 } from "../../features/public/publicProjects.api";
-import {
-  getProjectBookmarkStatusApi,
-  toggleProjectBookmarkApi,
-} from "../../features/bookmarks/bookmarks.api";
-import { formatMoneyShort } from "../../utils/formatMoneyShort";
-import { getRoles, getAccessToken } from "../../utils/storage";
+import { useCart } from "../../features/cart/cart.store";
 
 export default function PublicProjectDetailPage() {
-  const { slug = "" } = useParams();
-  const [item, setItem] = useState<PublicProjectDetail | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState("");
-  const [isBookmarked, setIsBookmarked] = useState(false);
-  const [isBookmarkLoading, setIsBookmarkLoading] = useState(false);
-
-  const roles = getRoles();
-  const token = getAccessToken();
-  const isCustomer = Boolean(token) && roles.includes("customer");
-
-  async function loadDetail() {
-    setIsLoading(true);
-    setErrorMessage("");
-
-    try {
-      const result = await getPublicProjectDetailApi(slug);
-      setItem(result.data);
-    } catch (error: any) {
-      setErrorMessage(
-        error?.response?.data?.message || "Không tải được chi tiết dự án"
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  async function loadBookmarkStatus(projectId: string) {
-    if (!isCustomer) return;
-
-    try {
-      const result = await getProjectBookmarkStatusApi(projectId);
-      setIsBookmarked(result.data.bookmarked);
-    } catch {
-      setIsBookmarked(false);
-    }
-  }
+  const { slug } = useParams<{ slug: string }>();
+  const [project, setProject] = useState<PublicProjectDetail | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const { addItem } = useCart();
 
   useEffect(() => {
-    loadDetail();
+    async function loadData() {
+      if (!slug) return;
+      setIsLoading(true);
+      try {
+        const result = await getPublicProjectDetailApi(slug);
+        setProject(result.data);
+      } catch (error) {
+        console.error("Lỗi tải chi tiết dự án:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    loadData();
   }, [slug]);
 
-  useEffect(() => {
-    if (item?.id) {
-      loadBookmarkStatus(item.id);
-    }
-  }, [item?.id]);
-
-  async function handleToggleBookmark() {
-    if (!item) return;
-
-    setIsBookmarkLoading(true);
-    try {
-      const result = await toggleProjectBookmarkApi(item.id);
-      setIsBookmarked(result.data.bookmarked);
-    } catch (error: any) {
-      setErrorMessage(
-        error?.response?.data?.message || "Không thể lưu dự án"
-      );
-    } finally {
-      setIsBookmarkLoading(false);
-    }
-  }
-
-  if (isLoading) {
-    return <div>Đang tải chi tiết dự án...</div>;
-  }
-
-  if (errorMessage) {
-    return <div style={styles.error}>{errorMessage}</div>;
-  }
-
-  if (!item) {
-    return <div>Không có dữ liệu</div>;
-  }
+  if (isLoading) return <div style={styles.loading}>Đang tải thông tin dự án...</div>;
+  if (!project) return <div style={styles.error}>Không tìm thấy dự án</div>;
 
   return (
     <div style={styles.page}>
-      <section style={styles.hero}>
-        <div style={styles.heroContent}>
-          <div>
-            <h1 style={styles.title}>{item.name}</h1>
-            <div style={styles.meta}>
-              {[item.district, item.city].filter(Boolean).join(", ") || "-"}
-            </div>
-            <div style={styles.desc}>
-              {item.description ||
-                item.shortDescription ||
-                "Đang cập nhật thông tin chi tiết dự án"}
-            </div>
+      <div style={styles.hero}>
+        <div style={styles.container}>
+          <h1 style={styles.title}>{project.name}</h1>
+          <p style={styles.location}>📍 {project.locationText || [project.district, project.city].filter(Boolean).join(", ")}</p>
+        </div>
+      </div>
 
-            <div style={styles.badges}>
-              <span style={styles.badge}>{item.projectType || "Dự án"}</span>
-              <span style={styles.badge}>{item.propertyCount} sản phẩm</span>
-              <span style={styles.badge}>
-                {item.developerName || "Đang cập nhật CĐT"}
-              </span>
-            </div>
+      <div style={styles.container}>
+        <section style={styles.section}>
+          <h2 style={styles.sectionTitle}>Giới thiệu dự án</h2>
+          <div style={styles.description}>{project.description || project.shortDescription}</div>
+        </section>
 
-            {isCustomer ? (
-              <div style={styles.bookmarkWrap}>
-                <button
-                  type="button"
-                  style={isBookmarked ? styles.savedBtn : styles.saveBtn}
-                  onClick={handleToggleBookmark}
-                  disabled={isBookmarkLoading}
-                >
-                  {isBookmarkLoading
-                    ? "Đang xử lý..."
-                    : isBookmarked
-                    ? "Đã quan tâm"
-                    : "Quan tâm dự án"}
-                </button>
+        <section style={styles.section}>
+          <h2 style={styles.sectionTitle}>Danh sách sản phẩm ({project.properties.length})</h2>
+          <div style={styles.grid}>
+            {project.properties.map((item) => (
+              <div key={item.id} style={styles.card}>
+                <Link to={`/properties/${item.id}`} style={styles.cardLink}>
+                  <div style={styles.imageBox}>
+                    {item.thumbnail?.url ? (
+                      <img src={item.thumbnail.url} alt={item.title} style={styles.img} />
+                    ) : (
+                      <div style={styles.noImg}>SGROUP IMAGE</div>
+                    )}
+                  </div>
+                  <div style={styles.cardContent}>
+                    <div style={styles.propertyCode}>{item.code}</div>
+                    <h3 style={styles.propertyTitle}>{item.title}</h3>
+                    <div style={styles.price}>
+                      {item.price ? `${Number(item.price).toLocaleString()} ${item.currency}` : "Liên hệ"}
+                    </div>
+                    <div style={styles.meta}>
+                      <span>🏠 {item.propertyType}</span>
+                      {item.areaGross && <span>📐 {item.areaGross} m²</span>}
+                    </div>
+                  </div>
+                </Link>
+
+                <div style={{ padding: "0 16px 16px" }}>
+                  <button 
+                    style={styles.cartBtn}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      addItem({
+                        id: item.id,
+                        code: item.code,
+                        title: item.title,
+                        price: item.price,
+                        projectSlug: project.slug,
+                        thumbnailUrl: item.thumbnail?.url || null
+                      });
+                      alert(`Đã lưu căn ${item.code} vào danh sách quan tâm!`);
+                    }}
+                  >
+                    🛒 Lưu giỏ hàng
+                  </button>
+                </div>
               </div>
-            ) : null}
+            ))}
           </div>
-
-          {item.thumbnailMedia?.url ? (
-            <img
-              src={item.thumbnailMedia.url}
-              alt={item.name}
-              style={styles.heroImage}
-            />
-          ) : (
-            <div style={styles.heroPlaceholder}>NO IMAGE</div>
-          )}
-        </div>
-      </section>
-
-      <section style={styles.section}>
-        <div style={styles.sectionTitle}>Sản phẩm tiêu biểu</div>
-
-        <div style={styles.propertyGrid}>
-          {item.properties.map((property) => (
-            <div key={property.id} style={styles.propertyCard}>
-              {property.thumbnail?.url ? (
-                <img
-                  src={property.thumbnail.url}
-                  alt={property.title}
-                  style={styles.propertyImage}
-                />
-              ) : (
-                <div style={styles.propertyPlaceholder}>NO IMAGE</div>
-              )}
-
-              <div style={styles.propertyBody}>
-                <div style={styles.propertyTitle}>
-                  {property.code} - {property.title}
-                </div>
-
-                <div style={styles.propertyMeta}>
-                  {property.propertyType} · {property.inventoryStatus}
-                </div>
-
-                <div style={styles.propertyInfo}>
-                  {[property.blockName, property.floorNo]
-                    .filter(Boolean)
-                    .join(" / ") || "-"}
-                </div>
-
-                <div style={styles.propertyInfo}>
-                  {property.areaGross ? `${property.areaGross} m²` : "-"}
-                </div>
-
-                <div style={styles.propertyPrice}>
-                  {property.price ? formatMoneyShort(property.price) : "Liên hệ"}
-                </div>
-              </div>
-            </div>
-          ))}
-
-          {item.properties.length === 0 ? (
-            <div style={styles.empty}>Chưa có sản phẩm public</div>
-          ) : null}
-        </div>
-      </section>
+        </section>
+      </div>
     </div>
   );
 }
 
-const styles: Record<string, React.CSSProperties> = {
-  page: { display: "grid", gap: 24 },
-  hero: {
-    background: "#fff",
-    borderRadius: 24,
-    padding: 24,
-    border: "1px solid #e5e7eb",
-  },
-  heroContent: {
-    display: "grid",
-    gridTemplateColumns: "1.2fr 1fr",
-    gap: 24,
-    alignItems: "center",
-  },
-  title: { margin: 0, fontSize: 38, fontWeight: 800, color: "#111827" },
-  meta: { marginTop: 8, fontSize: 15, color: "#4b5563" },
-  desc: { marginTop: 14, fontSize: 15, lineHeight: 1.7, color: "#6b7280" },
-  badges: {
-    marginTop: 18,
-    display: "flex",
-    flexWrap: "wrap",
-    gap: 10,
-  },
-  badge: {
-    background: "#eff6ff",
-    border: "1px solid #bfdbfe",
-    color: "#1d4ed8",
-    borderRadius: 999,
-    padding: "8px 12px",
-    fontSize: 13,
-    fontWeight: 700,
-  },
-  bookmarkWrap: {
-    marginTop: 18,
-  },
-  saveBtn: {
-    height: 44,
-    border: "none",
-    borderRadius: 12,
-    background: "#2388ff",
-    color: "#fff",
-    padding: "0 16px",
-    fontWeight: 700,
-    cursor: "pointer",
-  },
-  savedBtn: {
-    height: 44,
-    border: "none",
-    borderRadius: 12,
-    background: "#16a34a",
-    color: "#fff",
-    padding: "0 16px",
-    fontWeight: 700,
-    cursor: "pointer",
-  },
-  heroImage: {
-    width: "100%",
-    height: 340,
-    objectFit: "cover",
-    borderRadius: 20,
-  },
-  heroPlaceholder: {
-    width: "100%",
-    height: 340,
-    borderRadius: 20,
-    display: "grid",
-    placeItems: "center",
-    background: "#f3f4f6",
-    color: "#6b7280",
-    fontWeight: 700,
-  },
-  section: {
-    background: "#fff",
-    borderRadius: 24,
-    padding: 24,
-    border: "1px solid #e5e7eb",
-  },
-  sectionTitle: {
-    fontSize: 24,
-    fontWeight: 800,
-    color: "#111827",
-    marginBottom: 18,
-  },
-  propertyGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-    gap: 16,
-  },
-  propertyCard: {
-    border: "1px solid #e5e7eb",
-    borderRadius: 20,
-    overflow: "hidden",
-    background: "#fff",
-  },
-  propertyImage: {
-    width: "100%",
-    height: 180,
-    objectFit: "cover",
-  },
-  propertyPlaceholder: {
-    width: "100%",
-    height: 180,
-    display: "grid",
-    placeItems: "center",
-    background: "#f3f4f6",
-    color: "#6b7280",
-    fontWeight: 700,
-  },
-  propertyBody: {
-    padding: 16,
-    display: "grid",
-    gap: 8,
-  },
-  propertyTitle: {
-    fontSize: 16,
-    fontWeight: 800,
-    color: "#111827",
-  },
-  propertyMeta: {
-    fontSize: 13,
-    color: "#4b5563",
-  },
-  propertyInfo: {
-    fontSize: 13,
-    color: "#6b7280",
-  },
-  propertyPrice: {
-    marginTop: 4,
-    fontSize: 18,
-    fontWeight: 800,
-    color: "#111827",
-  },
-  error: {
-    color: "#991b1b",
-    background: "#fef2f2",
-    border: "1px solid #fecaca",
-    padding: 12,
-    borderRadius: 12,
-  },
-  empty: {
-    color: "#6b7280",
-    padding: 20,
-  },
+const styles: Record<string, CSSProperties> = {
+  page: { background: "#f9f9f9", minHeight: "100vh", paddingBottom: 60 },
+  hero: { background: "#fff", padding: "40px 0", borderBottom: "1px solid #eee", marginBottom: 30 },
+  container: { maxWidth: 1200, margin: "0 auto", padding: "0 20px" },
+  title: { fontSize: 36, fontWeight: 700, marginBottom: 10, color: "#111" },
+  location: { color: "#666", fontSize: 16 },
+  section: { marginBottom: 40 },
+  sectionTitle: { fontSize: 24, fontWeight: 700, marginBottom: 20, color: "#111", borderLeft: "4px solid #cf2027", paddingLeft: 15 },
+  description: { fontSize: 16, lineHeight: 1.8, color: "#444", whiteSpace: "pre-wrap" },
+  grid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 24 },
+  card: { background: "#fff", borderRadius: 12, overflow: "hidden", boxShadow: "0 4px 12px rgba(0,0,0,0.05)", border: "1px solid #eee" },
+  cardLink: { textDecoration: "none", color: "inherit", display: "block" },
+  imageBox: { height: 180, background: "#eee" },
+  img: { width: "100%", height: "100%", objectFit: "cover" },
+  noImg: { height: "100%", display: "grid", placeItems: "center", color: "#999", fontWeight: 700 },
+  cardContent: { padding: 16 },
+  propertyCode: { fontSize: 12, fontWeight: 700, color: "#cf2027", marginBottom: 4 },
+  propertyTitle: { fontSize: 18, fontWeight: 600, marginBottom: 10, height: 44, overflow: "hidden" },
+  price: { fontSize: 20, fontWeight: 700, color: "#111", marginBottom: 10 },
+  meta: { display: "flex", gap: 15, fontSize: 14, color: "#666", marginBottom: 15 },
+  cartBtn: { width: "100%", padding: "12px", background: "#111827", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700 },
+  loading: { padding: 100, textAlign: "center", fontSize: 18, color: "#666" },
+  error: { padding: 100, textAlign: "center", color: "#cf2027", fontSize: 18 }
 };

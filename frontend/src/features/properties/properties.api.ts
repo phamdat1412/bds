@@ -43,6 +43,7 @@ export type PropertyItem = {
   createdAt: string;
   updatedAt: string;
 };
+
 export type PropertyDetailItem = {
   id: string;
   project: {
@@ -76,6 +77,7 @@ export type PropertyDetailItem = {
   createdAt: string;
   updatedAt: string;
 };
+
 export async function getPropertiesApi(params?: {
   projectId?: string;
   keyword?: string;
@@ -154,6 +156,15 @@ export async function deletePropertyApi(propertyId: string) {
 
 export async function getPropertyDetailApi(propertyId: string) {
   const response = await api.get(`/properties/${propertyId}`);
+  return response.data as {
+    success: boolean;
+    message: string;
+    data: PropertyDetailItem;
+  };
+}
+
+export async function getPublicPropertyDetailApi(propertyId: string) {
+  const response = await api.get(`/public/properties/${propertyId}`);
   return response.data as {
     success: boolean;
     message: string;

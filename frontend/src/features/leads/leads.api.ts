@@ -45,7 +45,19 @@ export async function getLeadsApi(params?: {
   pageSize?: number;
 }) {
   const response = await api.get("/leads", { params });
-  return response.data;
+  return response.data as {
+    success: boolean;
+    message: string;
+    data: {
+      items: LeadItem[];
+      pagination: {
+        page: number;
+        pageSize: number;
+        totalItems: number;
+        totalPages: number;
+      };
+    };
+  };
 }
 
 export async function createLeadApi(payload: {
@@ -98,6 +110,7 @@ export async function deleteLeadApi(leadId: string) {
   const response = await api.delete(`/leads/${leadId}`);
   return response.data;
 }
+
 export type LeadDetailItem = {
   id: string;
   fullName: string;
@@ -105,12 +118,16 @@ export type LeadDetailItem = {
   email: string | null;
   source: string | null;
   channel: string | null;
-  status: string;
+  status: LeadStatus;
   note: string | null;
   interestedProject: {
     id: string;
     name: string;
     slug: string;
+  } | null;
+  customerProfile: {
+    id: string;
+    fullName: string;
   } | null;
   createdByUser: {
     id: string;
@@ -120,18 +137,25 @@ export type LeadDetailItem = {
   assignments: Array<{
     id: string;
     assignedAt: string;
+    note: string | null;
     assignedToUser: {
       id: string;
       email: string | null;
       phone: string | null;
     };
+    assignedByUser: {
+      id: string;
+      email: string | null;
+      phone: string | null;
+    } | null;
   }>;
   activities: Array<{
     id: string;
-    activityType: "call" | "note" | "meeting" | "visit" | "zalo" | "email";
-    note: string | null;
+    activityType: "call" | "note" | "meeting" | "visit" | "zalo" | "email" | "sms";
+    content: string;
+    activityAt: string;
     createdAt: string;
-    createdByUser: {
+    user: {
       id: string;
       email: string | null;
       phone: string | null;
@@ -140,6 +164,7 @@ export type LeadDetailItem = {
   createdAt: string;
   updatedAt: string;
 };
+
 export async function getLeadDetailApi(leadId: string) {
   const response = await api.get(`/leads/${leadId}`);
   return response.data as {

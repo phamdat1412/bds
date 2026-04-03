@@ -1,14 +1,33 @@
 import { useEffect, useState } from "react";
+import type { FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { getLeadsApi, type LeadItem } from "../../features/leads/leads.api";
+import {
+  createLeadApi,
+  getLeadsApi,
+  type LeadItem,
+} from "../../features/leads/leads.api";
 import LeadActivitiesPanel from "../../features/leads/LeadActivitiesPanel";
 import Modal from "../../components/ui/Modal";
+
+const emptyForm = {
+  fullName: "",
+  phone: "",
+  email: "",
+  source: "",
+  channel: "",
+  note: "",
+  interestedProjectId: "",
+};
 
 export default function SellerLeadsPage() {
   const [items, setItems] = useState<LeadItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [activeLeadId, setActiveLeadId] = useState("");
+
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [form, setForm] = useState(emptyForm);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function loadLeads() {
     setIsLoading(true);
@@ -30,14 +49,68 @@ export default function SellerLeadsPage() {
     loadLeads();
   }, []);
 
+  function openCreateModal() {
+    setForm(emptyForm);
+    setIsCreateModalOpen(true);
+  }
+
+  function closeCreateModal() {
+    setForm(emptyForm);
+    setIsCreateModalOpen(false);
+  }
+
+  async function handleCreateLead(event: FormEvent) {
+    event.preventDefault();
+    setErrorMessage("");
+    setIsSubmitting(true);
+
+    try {
+      await createLeadApi({
+        fullName: form.fullName,
+        phone: form.phone,
+        email: form.email || undefined,
+        source: form.source || undefined,
+        channel: form.channel || undefined,
+        note: form.note || undefined,
+        interestedProjectId: form.interestedProjectId || undefined,
+      });
+
+      closeCreateModal();
+      await loadLeads();
+    } catch (error: any) {
+      const apiMessage = error?.response?.data?.message;
+      const apiErrors = error?.response?.data?.errors;
+
+      setErrorMessage(
+        Array.isArray(apiErrors) && apiErrors.length > 0
+          ? apiErrors.join(", ")
+          : apiMessage || "Tạo lead thất bại"
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   return (
     <div style={styles.page}>
-      <div>
-        <h1 style={styles.title}>Leads của seller</h1>
-        <div style={styles.sub}>Danh sách lead đang xem được</div>
+      <div style={styles.headerWrap}>
+        <div>
+          <h1 style={styles.title}>Leads của seller</h1>
+          <div style={styles.sub}>Danh sách lead đang xem được</div>
+        </div>
+
+        <div style={styles.headerActions}>
+          <button type="button" style={styles.primaryBtn} onClick={openCreateModal}>
+            Thêm lead mới
+          </button>
+        </div>
       </div>
 
       {errorMessage ? <div style={styles.error}>{errorMessage}</div> : null}
+
+      <div style={styles.infoBox}>
+        Lead tạo từ trang seller sẽ tự động được gán cho chính seller đang đăng nhập.
+      </div>
 
       <div style={styles.card}>
         {isLoading ? (
@@ -106,14 +179,128 @@ export default function SellerLeadsPage() {
       >
         {activeLeadId ? <LeadActivitiesPanel leadId={activeLeadId} /> : null}
       </Modal>
+
+      <Modal
+        open={isCreateModalOpen}
+        title="Thêm lead mới"
+        onClose={closeCreateModal}
+      >
+        <form onSubmit={handleCreateLead} style={styles.modalForm}>
+          <input
+            style={styles.input}
+            placeholder="Họ tên"
+            value={form.fullName}
+            onChange={(e) =>
+              setForm((prev) => ({ ...prev, fullName: e.target.value }))
+            }
+          />
+
+          <input
+            style={styles.input}
+            placeholder="Số điện thoại"
+            value={form.phone}
+            onChange={(e) =>
+              setForm((prev) => ({ ...prev, phone: e.target.value }))
+            }
+          />
+
+          <input
+            style={styles.input}
+            placeholder="Email"
+            value={form.email}
+            onChange={(e) =>
+              setForm((prev) => ({ ...prev, email: e.target.value }))
+            }
+          />
+
+          <input
+            style={styles.input}
+            placeholder="Source"
+            value={form.source}
+            onChange={(e) =>
+              setForm((prev) => ({ ...prev, source: e.target.value }))
+            }
+          />
+
+          <input
+            style={styles.input}
+            placeholder="Channel"
+            value={form.channel}
+            onChange={(e) =>
+              setForm((prev) => ({ ...prev, channel: e.target.value }))
+            }
+          />
+
+          <textarea
+            style={styles.textarea}
+            placeholder="Ghi chú"
+            value={form.note}
+            onChange={(e) =>
+              setForm((prev) => ({ ...prev, note: e.target.value }))
+            }
+          />
+
+          <div style={styles.modalActions}>
+            <button
+              type="button"
+              style={styles.secondaryBtn}
+              onClick={closeCreateModal}
+              disabled={isSubmitting}
+            >
+              Hủy
+            </button>
+            <button type="submit" style={styles.primaryBtn} disabled={isSubmitting}>
+              {isSubmitting ? "Đang lưu..." : "Tạo lead"}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }
 
 const styles: Record<string, React.CSSProperties> = {
   page: { display: "grid", gap: 20 },
+  headerWrap: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 16,
+  },
   title: { margin: 0, fontSize: 34, fontWeight: 800, color: "#111827" },
   sub: { marginTop: 6, color: "#6b7280" },
+  headerActions: {
+    display: "flex",
+    gap: 12,
+  },
+  primaryBtn: {
+    height: 44,
+    border: "none",
+    borderRadius: 12,
+    background: "#2388ff",
+    color: "#fff",
+    padding: "0 18px",
+    fontWeight: 700,
+    cursor: "pointer",
+  },
+  secondaryBtn: {
+    height: 44,
+    border: "1px solid #d1d5db",
+    borderRadius: 12,
+    background: "#fff",
+    color: "#111827",
+    padding: "0 18px",
+    fontWeight: 700,
+    cursor: "pointer",
+  },
+  infoBox: {
+    padding: 12,
+    borderRadius: 12,
+    background: "#eff6ff",
+    border: "1px solid #bfdbfe",
+    color: "#1d4ed8",
+    fontSize: 14,
+  },
   card: {
     background: "#fff",
     borderRadius: 24,
@@ -164,6 +351,36 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "0 12px",
     fontWeight: 700,
     cursor: "pointer",
+  },
+  modalForm: {
+    display: "grid",
+    gap: 14,
+  },
+  input: {
+    height: 46,
+    borderRadius: 12,
+    border: "1px solid #d1d5db",
+    padding: "0 14px",
+    fontSize: 14,
+    width: "100%",
+    boxSizing: "border-box",
+    background: "#fff",
+  },
+  textarea: {
+    minHeight: 110,
+    borderRadius: 12,
+    border: "1px solid #d1d5db",
+    padding: 14,
+    fontSize: 14,
+    width: "100%",
+    boxSizing: "border-box",
+    resize: "vertical",
+  },
+  modalActions: {
+    display: "flex",
+    justifyContent: "flex-end",
+    gap: 12,
+    marginTop: 8,
   },
   error: {
     color: "#991b1b",

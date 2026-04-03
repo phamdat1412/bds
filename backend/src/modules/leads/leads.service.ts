@@ -1,14 +1,102 @@
 import prisma from "../../configs/prisma.js";
-import {
+import { buildPaginationMeta } from "../../utils/pagination.js";
+import type {
   AssignLeadInput,
   CreateLeadActivityInput,
   CreateLeadInput,
   LeadListQuery,
-   UpdateLeadInput,
+  UpdateLeadInput,
   UpdateLeadStatusInput,
 } from "./leads.types.js";
 
-export async function createLead(input: CreateLeadInput, currentUserId: string) {
+type LeadActor = {
+  userId: string;
+  roles?: string[];
+};
+
+function isAdmin(actor: LeadActor) {
+  return (actor.roles || []).includes("admin");
+}
+
+function isSeller(actor: LeadActor) {
+  return (actor.roles || []).includes("seller");
+}
+
+async function ensureLeadAccessible(leadId: string, actor: LeadActor) {
+  const leadIdBigInt = BigInt(leadId);
+
+  const lead = await prisma.lead.findUnique({
+    where: { id: leadIdBigInt },
+  });
+
+  if (!lead) {
+    throw new Error("Lead not found");
+  }
+
+  if (isAdmin(actor)) {
+    return lead;
+  }
+
+  const assignment = await prisma.leadAssignment.findFirst({
+    where: {
+      leadId: leadIdBigInt,
+      assignedToUserId: BigInt(actor.userId),
+    },
+  });
+
+  if (!assignment) {
+    throw new Error("Forbidden");
+  }
+
+  return lead;
+}
+
+function mapLeadDetail(lead: {
+  id: bigint;
+  fullName: string;
+  phone: string;
+  email: string | null;
+  source: string | null;
+  channel: string | null;
+  status: string;
+  note: string | null;
+  interestedProject?: { id: bigint; name: string; slug: string } | null;
+  createdByUser?: { id: bigint; email: string | null; phone: string | null } | null;
+  createdAt: Date;
+  updatedAt: Date;
+}) {
+  return {
+    id: lead.id.toString(),
+    fullName: lead.fullName,
+    phone: lead.phone,
+    email: lead.email,
+    source: lead.source,
+    channel: lead.channel,
+    status: lead.status,
+    note: lead.note,
+    interestedProject: lead.interestedProject
+      ? {
+          id: lead.interestedProject.id.toString(),
+          name: lead.interestedProject.name,
+          slug: lead.interestedProject.slug,
+        }
+      : null,
+    createdByUser: lead.createdByUser
+      ? {
+          id: lead.createdByUser.id.toString(),
+          email: lead.createdByUser.email,
+          phone: lead.createdByUser.phone,
+        }
+      : null,
+    createdAt: lead.createdAt,
+    updatedAt: lead.updatedAt,
+  };
+}
+
+export async function createLead(
+  input: CreateLeadInput,
+  actor: LeadActor
+) {
   let interestedProjectIdBigInt: bigint | undefined = undefined;
 
   if (input.interestedProjectId) {
@@ -23,119 +111,58 @@ export async function createLead(input: CreateLeadInput, currentUserId: string) 
     interestedProjectIdBigInt = project.id;
   }
 
-  const lead = await prisma.lead.create({
-    data: {
-      fullName: input.fullName.trim(),
-      phone: input.phone.trim(),
-      email: input.email?.trim().toLowerCase() || null,
-      source: input.source?.trim() || null,
-      channel: input.channel?.trim() || null,
-      note: input.note?.trim() || null,
-      interestedProjectId: interestedProjectIdBigInt,
-      createdByUserId: BigInt(currentUserId),
-      status: "new",
-    },
-    include: {
-      interestedProject: true,
-      createdByUser: true,
-    },
+  const result = await prisma.$transaction(async (tx) => {
+    const lead = await tx.lead.create({
+      data: {
+        fullName: input.fullName.trim(),
+        phone: input.phone.trim(),
+        email: input.email?.trim().toLowerCase() || null,
+        source: input.source?.trim() || null,
+        channel: input.channel?.trim() || null,
+        note: input.note?.trim() || null,
+        interestedProjectId: interestedProjectIdBigInt,
+        createdByUserId: BigInt(actor.userId),
+        status: "new",
+      },
+      include: {
+        interestedProject: true,
+        createdByUser: true,
+      },
+    });
+
+    if (isSeller(actor)) {
+      await tx.leadAssignment.create({
+        data: {
+          leadId: lead.id,
+          assignedToUserId: BigInt(actor.userId),
+          assignedByUserId: BigInt(actor.userId),
+          assignedAt: new Date(),
+          note: "Auto assigned to creator",
+        },
+      });
+    }
+
+    return lead;
   });
 
-  return mapLeadDetail(lead);
+  return mapLeadDetail(result);
 }
 
-// export async function listLeads(query: LeadListQuery) {
-//   const keyword = query.keyword?.trim() || undefined;
-//   const assignedToUserId = query.assignedToUserId
-//     ? BigInt(query.assignedToUserId)
-//     : undefined;
-
-//   const leads = await prisma.lead.findMany({
-//     where: {
-//       ...(query.status ? { status: query.status } : {}),
-//       ...(query.source ? { source: query.source } : {}),
-//       ...(keyword
-//         ? {
-//             OR: [
-//               { fullName: { contains: keyword } },
-//               { phone: { contains: keyword } },
-//               { email: { contains: keyword } },
-//             ],
-//           }
-//         : {}),
-//       ...(assignedToUserId
-//         ? {
-//             assignments: {
-//               some: {
-//                 assignedToUserId,
-//               },
-//             },
-//           }
-//         : {}),
-//     },
-//     include: {
-//       interestedProject: true,
-//       createdByUser: true,
-//       assignments: {
-//         include: {
-//           assignedToUser: true,
-//           assignedByUser: true,
-//         },
-//         orderBy: {
-//           assignedAt: "desc",
-//         },
-//       },
-//     },
-//     orderBy: {
-//       createdAt: "desc",
-//     },
-//   });
-
-//   return leads.map((lead) => ({
-//     id: lead.id.toString(),
-//     fullName: lead.fullName,
-//     phone: lead.phone,
-//     email: lead.email,
-//     source: lead.source,
-//     channel: lead.channel,
-//     status: lead.status,
-//     note: lead.note,
-//     interestedProject: lead.interestedProject
-//       ? {
-//           id: lead.interestedProject.id.toString(),
-//           name: lead.interestedProject.name,
-//           slug: lead.interestedProject.slug,
-//         }
-//       : null,
-//     createdByUser: lead.createdByUser
-//       ? {
-//           id: lead.createdByUser.id.toString(),
-//           email: lead.createdByUser.email,
-//           phone: lead.createdByUser.phone,
-//         }
-//       : null,
-//     latestAssignment: lead.assignments[0]
-//       ? {
-//           assignedToUserId: lead.assignments[0].assignedToUser.id.toString(),
-//           assignedToUserEmail: lead.assignments[0].assignedToUser.email,
-//           assignedAt: lead.assignments[0].assignedAt,
-//         }
-//       : null,
-//     createdAt: lead.createdAt,
-//     updatedAt: lead.updatedAt,
-//   }));
-// }
-import { buildPaginationMeta } from "../../utils/pagination.js";
-
-export async function listLeads(query: LeadListQuery) {
+export async function listLeads(
+  query: LeadListQuery,
+  actor: LeadActor
+) {
   const keyword = query.keyword?.trim() || undefined;
-  const assignedToUserId = query.assignedToUserId
-    ? BigInt(query.assignedToUserId)
-    : undefined;
   const page = query.page || 1;
   const pageSize = query.pageSize || 10;
   const skip = (page - 1) * pageSize;
   const take = pageSize;
+
+  const forcedAssignedToUserId = isSeller(actor)
+    ? BigInt(actor.userId)
+    : query.assignedToUserId
+    ? BigInt(query.assignedToUserId)
+    : undefined;
 
   const where = {
     ...(query.status ? { status: query.status } : {}),
@@ -149,11 +176,11 @@ export async function listLeads(query: LeadListQuery) {
           ],
         }
       : {}),
-    ...(assignedToUserId
+    ...(forcedAssignedToUserId
       ? {
           assignments: {
             some: {
-              assignedToUserId,
+              assignedToUserId: forcedAssignedToUserId,
             },
           },
         }
@@ -222,7 +249,10 @@ export async function listLeads(query: LeadListQuery) {
     pagination: buildPaginationMeta(page, pageSize, totalItems),
   };
 }
-export async function getLeadDetail(leadId: string) {
+
+export async function getLeadDetail(leadId: string, actor: LeadActor) {
+  await ensureLeadAccessible(leadId, actor);
+
   const lead = await prisma.lead.findUnique({
     where: { id: BigInt(leadId) },
     include: {
@@ -318,15 +348,10 @@ export async function getLeadDetail(leadId: string) {
 
 export async function updateLeadStatus(
   leadId: string,
-  input: UpdateLeadStatusInput
+  input: UpdateLeadStatusInput,
+  actor: LeadActor
 ) {
-  const lead = await prisma.lead.findUnique({
-    where: { id: BigInt(leadId) },
-  });
-
-  if (!lead) {
-    throw new Error("Lead not found");
-  }
+  await ensureLeadAccessible(leadId, actor);
 
   const updatedLead = await prisma.lead.update({
     where: { id: BigInt(leadId) },
@@ -357,6 +382,13 @@ export async function assignLead(
 
   const assignedUser = await prisma.user.findUnique({
     where: { id: BigInt(input.assignedToUserId) },
+    include: {
+      roles: {
+        include: {
+          role: true,
+        },
+      },
+    },
   });
 
   if (!assignedUser) {
@@ -365,6 +397,14 @@ export async function assignLead(
 
   if (assignedUser.userType !== "staff") {
     throw new Error("Assigned user must be staff");
+  }
+
+  const hasAllowedRole = assignedUser.roles.some((item) =>
+    ["seller", "admin"].includes(item.role.code)
+  );
+
+  if (!hasAllowedRole) {
+    throw new Error("Assigned user must be seller or admin");
   }
 
   const assignment = await prisma.leadAssignment.create({
@@ -405,20 +445,14 @@ export async function assignLead(
 export async function createLeadActivity(
   leadId: string,
   input: CreateLeadActivityInput,
-  currentUserId: string
+  actor: LeadActor
 ) {
-  const lead = await prisma.lead.findUnique({
-    where: { id: BigInt(leadId) },
-  });
-
-  if (!lead) {
-    throw new Error("Lead not found");
-  }
+  await ensureLeadAccessible(leadId, actor);
 
   const activity = await prisma.activity.create({
     data: {
       leadId: BigInt(leadId),
-      userId: BigInt(currentUserId),
+      userId: BigInt(actor.userId),
       activityType: input.activityType,
       content: input.content.trim(),
       activityAt: input.activityAt ? new Date(input.activityAt) : new Date(),
@@ -443,10 +477,14 @@ export async function createLeadActivity(
     },
   };
 }
+
 export async function updateLead(
   leadId: string,
-  input: UpdateLeadInput
+  input: UpdateLeadInput,
+  actor: LeadActor
 ) {
+  await ensureLeadAccessible(leadId, actor);
+
   const existingLead = await prisma.lead.findUnique({
     where: { id: BigInt(leadId) },
   });
@@ -518,47 +556,5 @@ export async function deleteLead(leadId: string) {
   return {
     id: leadId,
     deleted: true,
-  };
-}
-
-function mapLeadDetail(lead: {
-  id: bigint;
-  fullName: string;
-  phone: string;
-  email: string | null;
-  source: string | null;
-  channel: string | null;
-  status: string;
-  note: string | null;
-  interestedProject?: { id: bigint; name: string; slug: string } | null;
-  createdByUser?: { id: bigint; email: string | null; phone: string | null } | null;
-  createdAt: Date;
-  updatedAt: Date;
-}) {
-  return {
-    id: lead.id.toString(),
-    fullName: lead.fullName,
-    phone: lead.phone,
-    email: lead.email,
-    source: lead.source,
-    channel: lead.channel,
-    status: lead.status,
-    note: lead.note,
-    interestedProject: lead.interestedProject
-      ? {
-          id: lead.interestedProject.id.toString(),
-          name: lead.interestedProject.name,
-          slug: lead.interestedProject.slug,
-        }
-      : null,
-    createdByUser: lead.createdByUser
-      ? {
-          id: lead.createdByUser.id.toString(),
-          email: lead.createdByUser.email,
-          phone: lead.createdByUser.phone,
-        }
-      : null,
-    createdAt: lead.createdAt,
-    updatedAt: lead.updatedAt,
   };
 }

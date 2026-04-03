@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent, CSSProperties } from "react";
-import { createStaffApi, getUsersApi } from "./users.api";
+import {
+  createStaffApi,
+  deleteUserApi,
+  getUsersApi,
+  updateUserApi,
+} from "./users.api";
 import type { UserItem, UserStatus, UserType } from "./users.api";
 import Modal from "../../components/ui/Modal";
 import StatusBadge from "../../components/ui/StatusBadge";
@@ -14,11 +19,20 @@ const roleOptions = [
 const userTypeOptions: UserType[] = ["customer", "staff"];
 const statusOptions: UserStatus[] = ["active", "inactive", "blocked"];
 
-const emptyForm = {
+const emptyCreateForm = {
   email: "",
   phone: "",
   password: "",
   roleCode: "seller",
+};
+
+const emptyEditForm = {
+  email: "",
+  phone: "",
+  fullName: "",
+  status: "active" as UserStatus,
+  roleCode: "seller",
+  password: "",
 };
 
 export default function UsersPage() {
@@ -30,8 +44,12 @@ export default function UsersPage() {
   const [userTypeFilter, setUserTypeFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
 
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [form, setForm] = useState(emptyForm);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [createForm, setCreateForm] = useState(emptyCreateForm);
+
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<UserItem | null>(null);
+  const [editForm, setEditForm] = useState(emptyEditForm);
 
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
@@ -85,13 +103,32 @@ export default function UsersPage() {
   }, []);
 
   function openCreateModal() {
-    setForm(emptyForm);
-    setIsModalOpen(true);
+    setCreateForm(emptyCreateForm);
+    setIsCreateModalOpen(true);
   }
 
-  function closeModal() {
-    setForm(emptyForm);
-    setIsModalOpen(false);
+  function closeCreateModal() {
+    setCreateForm(emptyCreateForm);
+    setIsCreateModalOpen(false);
+  }
+
+  function openEditModal(user: UserItem) {
+    setEditingUser(user);
+    setEditForm({
+      email: user.email || "",
+      phone: user.phone || "",
+      fullName: user.customerProfile?.fullName || "",
+      status: user.status,
+      roleCode: user.roles[0]?.code || "seller",
+      password: "",
+    });
+    setIsEditModalOpen(true);
+  }
+
+  function closeEditModal() {
+    setEditingUser(null);
+    setEditForm(emptyEditForm);
+    setIsEditModalOpen(false);
   }
 
   async function handleFilterSubmit(event: FormEvent) {
@@ -105,13 +142,13 @@ export default function UsersPage() {
 
     try {
       await createStaffApi({
-        email: form.email || undefined,
-        phone: form.phone || undefined,
-        password: form.password,
-        roleCode: form.roleCode,
+        email: createForm.email || undefined,
+        phone: createForm.phone || undefined,
+        password: createForm.password,
+        roleCode: createForm.roleCode,
       });
 
-      closeModal();
+      closeCreateModal();
       await loadUsers(page);
     } catch (error: any) {
       const apiMessage = error?.response?.data?.message;
@@ -121,6 +158,63 @@ export default function UsersPage() {
         Array.isArray(apiErrors) && apiErrors.length > 0
           ? apiErrors.join(", ")
           : apiMessage || "Tạo staff thất bại"
+      );
+    }
+  }
+
+  async function handleUpdateUser(event: FormEvent) {
+    event.preventDefault();
+
+    if (!editingUser) return;
+
+    setErrorMessage("");
+
+    try {
+      await updateUserApi(editingUser.id, {
+        email: editForm.email || undefined,
+        phone: editForm.phone || undefined,
+        fullName: editForm.fullName || undefined,
+        status: editForm.status,
+        roleCode: editingUser.userType === "staff" ? editForm.roleCode : undefined,
+        password: editForm.password || undefined,
+      });
+
+      closeEditModal();
+      await loadUsers(page);
+    } catch (error: any) {
+      const apiMessage = error?.response?.data?.message;
+      const apiErrors = error?.response?.data?.errors;
+
+      setErrorMessage(
+        Array.isArray(apiErrors) && apiErrors.length > 0
+          ? apiErrors.join(", ")
+          : apiMessage || "Cập nhật user thất bại"
+      );
+    }
+  }
+
+  async function handleDeleteUser(user: UserItem) {
+    const confirmed = window.confirm(
+      `Bạn có chắc muốn khóa user ${
+        user.customerProfile?.fullName || user.email || user.phone || user.id
+      } không?`
+    );
+
+    if (!confirmed) return;
+
+    setErrorMessage("");
+
+    try {
+      await deleteUserApi(user.id);
+      await loadUsers(page);
+    } catch (error: any) {
+      const apiMessage = error?.response?.data?.message;
+      const apiErrors = error?.response?.data?.errors;
+
+      setErrorMessage(
+        Array.isArray(apiErrors) && apiErrors.length > 0
+          ? apiErrors.join(", ")
+          : apiMessage || "Khóa user thất bại"
       );
     }
   }
@@ -219,6 +313,7 @@ export default function UsersPage() {
                     <th style={styles.th}>Vai trò</th>
                     <th style={styles.th}>Trạng thái</th>
                     <th style={styles.th}>Đăng nhập gần nhất</th>
+                    <th style={styles.th}>Thao tác</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -239,11 +334,14 @@ export default function UsersPage() {
                           </div>
                         </div>
                       </td>
+
                       <td style={styles.td}>
                         <div>{item.email || "-"}</div>
                         <div style={styles.subLine}>{item.phone || "-"}</div>
                       </td>
+
                       <td style={styles.td}>{item.userType}</td>
+
                       <td style={styles.td}>
                         <div style={styles.roleWrap}>
                           {item.roles.length > 0 ? (
@@ -257,20 +355,41 @@ export default function UsersPage() {
                           )}
                         </div>
                       </td>
+
                       <td style={styles.td}>
                         <StatusBadge value={item.status} />
                       </td>
+
                       <td style={styles.td}>
                         {item.lastLoginAt
                           ? new Date(item.lastLoginAt).toLocaleString()
                           : "-"}
+                      </td>
+
+                      <td style={styles.td}>
+                        <div style={styles.actionWrap}>
+                          <button
+                            type="button"
+                            style={styles.smallSecondaryBtn}
+                            onClick={() => openEditModal(item)}
+                          >
+                            Sửa
+                          </button>
+                          <button
+                            type="button"
+                            style={styles.smallDangerBtn}
+                            onClick={() => handleDeleteUser(item)}
+                          >
+                            Khóa
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
 
                   {items.length === 0 ? (
                     <tr>
-                      <td colSpan={6} style={styles.empty}>
+                      <td colSpan={7} style={styles.empty}>
                         Chưa có dữ liệu người dùng
                       </td>
                     </tr>
@@ -290,23 +409,23 @@ export default function UsersPage() {
         )}
       </section>
 
-      <Modal open={isModalOpen} title="Tạo staff mới" onClose={closeModal}>
+      <Modal open={isCreateModalOpen} title="Tạo staff mới" onClose={closeCreateModal}>
         <form onSubmit={handleCreateStaff} style={styles.modalForm}>
           <input
             style={styles.input}
             placeholder="Email"
-            value={form.email}
+            value={createForm.email}
             onChange={(e) =>
-              setForm((prev) => ({ ...prev, email: e.target.value }))
+              setCreateForm((prev) => ({ ...prev, email: e.target.value }))
             }
           />
 
           <input
             style={styles.input}
             placeholder="Số điện thoại"
-            value={form.phone}
+            value={createForm.phone}
             onChange={(e) =>
-              setForm((prev) => ({ ...prev, phone: e.target.value }))
+              setCreateForm((prev) => ({ ...prev, phone: e.target.value }))
             }
           />
 
@@ -314,17 +433,17 @@ export default function UsersPage() {
             style={styles.input}
             type="password"
             placeholder="Mật khẩu"
-            value={form.password}
+            value={createForm.password}
             onChange={(e) =>
-              setForm((prev) => ({ ...prev, password: e.target.value }))
+              setCreateForm((prev) => ({ ...prev, password: e.target.value }))
             }
           />
 
           <select
             style={styles.select}
-            value={form.roleCode}
+            value={createForm.roleCode}
             onChange={(e) =>
-              setForm((prev) => ({ ...prev, roleCode: e.target.value }))
+              setCreateForm((prev) => ({ ...prev, roleCode: e.target.value }))
             }
           >
             {roleOptions.map((role) => (
@@ -335,11 +454,102 @@ export default function UsersPage() {
           </select>
 
           <div style={styles.modalActions}>
-            <button type="button" style={styles.secondaryBtn} onClick={closeModal}>
+            <button
+              type="button"
+              style={styles.secondaryBtn}
+              onClick={closeCreateModal}
+            >
               Hủy
             </button>
             <button type="submit" style={styles.primaryBtn}>
               Tạo staff
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal open={isEditModalOpen} title="Chỉnh sửa user" onClose={closeEditModal}>
+        <form onSubmit={handleUpdateUser} style={styles.modalForm}>
+          <input
+            style={styles.input}
+            placeholder="Họ và tên"
+            value={editForm.fullName}
+            onChange={(e) =>
+              setEditForm((prev) => ({ ...prev, fullName: e.target.value }))
+            }
+          />
+
+          <input
+            style={styles.input}
+            placeholder="Email"
+            value={editForm.email}
+            onChange={(e) =>
+              setEditForm((prev) => ({ ...prev, email: e.target.value }))
+            }
+          />
+
+          <input
+            style={styles.input}
+            placeholder="Số điện thoại"
+            value={editForm.phone}
+            onChange={(e) =>
+              setEditForm((prev) => ({ ...prev, phone: e.target.value }))
+            }
+          />
+
+          <select
+            style={styles.select}
+            value={editForm.status}
+            onChange={(e) =>
+              setEditForm((prev) => ({
+                ...prev,
+                status: e.target.value as UserStatus,
+              }))
+            }
+          >
+            {statusOptions.map((item) => (
+              <option key={item} value={item}>
+                {item}
+              </option>
+            ))}
+          </select>
+
+          {editingUser?.userType === "staff" ? (
+            <select
+              style={styles.select}
+              value={editForm.roleCode}
+              onChange={(e) =>
+                setEditForm((prev) => ({ ...prev, roleCode: e.target.value }))
+              }
+            >
+              {roleOptions.map((role) => (
+                <option key={role.value} value={role.value}>
+                  {role.label}
+                </option>
+              ))}
+            </select>
+          ) : null}
+
+          <input
+            style={styles.input}
+            type="password"
+            placeholder="Mật khẩu mới (không bắt buộc)"
+            value={editForm.password}
+            onChange={(e) =>
+              setEditForm((prev) => ({ ...prev, password: e.target.value }))
+            }
+          />
+
+          <div style={styles.modalActions}>
+            <button
+              type="button"
+              style={styles.secondaryBtn}
+              onClick={closeEditModal}
+            >
+              Hủy
+            </button>
+            <button type="submit" style={styles.primaryBtn}>
+              Lưu thay đổi
             </button>
           </div>
         </form>
@@ -518,6 +728,31 @@ const styles: Record<string, CSSProperties> = {
     borderRadius: 999,
     fontSize: 12,
     fontWeight: 700,
+  },
+  actionWrap: {
+    display: "flex",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  smallSecondaryBtn: {
+    height: 34,
+    border: "1px solid #d1d5db",
+    borderRadius: 10,
+    background: "#fff",
+    color: "#111827",
+    padding: "0 12px",
+    fontWeight: 700,
+    cursor: "pointer",
+  },
+  smallDangerBtn: {
+    height: 34,
+    border: "1px solid #fecaca",
+    borderRadius: 10,
+    background: "#fef2f2",
+    color: "#b91c1c",
+    padding: "0 12px",
+    fontWeight: 700,
+    cursor: "pointer",
   },
   modalForm: {
     display: "grid",

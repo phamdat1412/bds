@@ -10,6 +10,7 @@ import dashboardRoutes from "../modules/dashboard/dashboard.routes.js";
 import publicProjectsRouter from "../modules/public/public-projects.routes.js";
 import newsRouter from "../modules/news/news.routes.js";
 import publicNewsRouter from "../modules/public/public-news.routes.js";
+import publicPropertiesRouter from "../modules/public/public-properties.routes.js";
 import bookmarksRouter from "../modules/bookmarks/bookmarks.routes.js";
 
 const router = Router();
@@ -23,8 +24,9 @@ router.use("/properties", propertiesRoutes);
 router.use("/media", mediaRoutes);
 router.use("/dashboard", dashboardRoutes);
 router.use("/public", publicProjectsRouter);
-router.use("/news", newsRouter);
 router.use("/public", publicNewsRouter);
+router.use("/public", publicPropertiesRouter);
+router.use("/news", newsRouter);
 router.use("/bookmarks", bookmarksRouter);
 
 export default router;

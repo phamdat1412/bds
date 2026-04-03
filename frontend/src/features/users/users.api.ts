@@ -11,6 +11,7 @@ export type UserItem = {
   status: UserStatus;
   lastLoginAt: string | null;
   createdAt: string;
+  updatedAt?: string;
   customerProfile: {
     id: string;
     fullName: string;
@@ -32,7 +33,19 @@ export async function getUsersApi(params?: {
   pageSize?: number;
 }) {
   const response = await api.get("/users", { params });
-  return response.data;
+  return response.data as {
+    success: boolean;
+    message: string;
+    data: {
+      items: UserItem[];
+      pagination: {
+        page: number;
+        pageSize: number;
+        totalItems: number;
+        totalPages: number;
+      };
+    };
+  };
 }
 
 export async function createStaffApi(payload: {
@@ -44,6 +57,27 @@ export async function createStaffApi(payload: {
   const response = await api.post("/users/staff", payload);
   return response.data;
 }
+
+export async function updateUserApi(
+  userId: string,
+  payload: {
+    email?: string;
+    phone?: string;
+    fullName?: string;
+    status?: UserStatus;
+    roleCode?: string;
+    password?: string;
+  }
+) {
+  const response = await api.patch(`/users/${userId}`, payload);
+  return response.data;
+}
+
+export async function deleteUserApi(userId: string) {
+  const response = await api.delete(`/users/${userId}`);
+  return response.data;
+}
+
 export type CustomerProfileResponse = {
   id: string;
   email: string | null;

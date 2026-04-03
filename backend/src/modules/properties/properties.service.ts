@@ -184,15 +184,42 @@ export async function getPropertyDetail(propertyId: string) {
         include: {
           mediaFile: true,
         },
-        orderBy: {
-          sortOrder: "asc",
-        },
+        orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }],
       },
     },
   });
 
   if (!property) {
     throw new Error("Property not found");
+  }
+
+  return mapPropertyDetail(property);
+}
+
+export async function getPublicPropertyDetail(propertyId: string) {
+  const property = await prisma.property.findUnique({
+    where: { id: BigInt(propertyId) },
+    include: {
+      project: true,
+      images: {
+        include: {
+          mediaFile: true,
+        },
+        orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }],
+      },
+    },
+  });
+
+  if (!property) {
+    throw new Error("Property not found");
+  }
+
+  if (property.project.status !== "published") {
+    throw new Error("Property not available");
+  }
+
+  if (property.inventoryStatus === "hidden") {
+    throw new Error("Property not available");
   }
 
   return mapPropertyDetail(property);

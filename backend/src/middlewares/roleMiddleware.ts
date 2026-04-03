@@ -7,11 +7,17 @@ type AuthenticatedRequest = Request & {
     userType: string;
     roles?: string[];
   };
+  authUser?: {
+    userId: string;
+    email: string | null;
+    userType: string;
+    roles?: string[];
+  };
 };
 
 export function roleMiddleware(...allowedRoles: string[]) {
   return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-    const userRoles = req.user?.roles || [];
+    const userRoles = req.authUser?.roles || req.user?.roles || [];
     const allowed = userRoles.some((role) => allowedRoles.includes(role));
 
     if (!allowed) {

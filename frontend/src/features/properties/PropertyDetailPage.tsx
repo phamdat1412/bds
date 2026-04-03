@@ -1,21 +1,31 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { getPropertyDetailApi, type PropertyDetailItem } from "./properties.api";
+// path: frontend/src/features/properties/PropertyDetailPage.tsx
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import {
+  getPublicPropertyDetailApi,
+  type PropertyDetailItem,
+} from "./properties.api";
 import { formatMoneyShort } from "../../utils/formatMoneyShort";
+import { useCart } from "../../features/cart/cart.store";
 
 export default function PropertyDetailPage() {
   const { id = "" } = useParams();
+  const navigate = useNavigate();
+  const { addItem } = useCart();
+
   const [item, setItem] = useState<PropertyDetailItem | null>(null);
   const [activeImageUrl, setActiveImageUrl] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
   async function loadDetail() {
+    if (!id) return;
+
     setIsLoading(true);
     setErrorMessage("");
 
     try {
-      const result = await getPropertyDetailApi(id);
+      const result = await getPublicPropertyDetailApi(id);
       setItem(result.data);
     } catch (error: any) {
       setErrorMessage(
@@ -40,98 +50,105 @@ export default function PropertyDetailPage() {
     }
   }, [item]);
 
+  const handleSave = () => {
+    if (!item) return;
+
+    addItem({
+      id: item.id,
+      code: item.code,
+      title: item.title,
+      price: item.price,
+      projectSlug: item.project.slug,
+      thumbnailUrl: activeImageUrl || null,
+    });
+
+    alert(`Đã lưu căn ${item.code} vào danh sách quan tâm!`);
+  };
+
   const summaryRows = useMemo(() => {
     if (!item) return [];
+
     return [
       { label: "Mã căn", value: item.code },
       { label: "Tên sản phẩm", value: item.title },
-      { label: "Loại", value: item.propertyType },
+      { label: "Loại hình", value: item.propertyType },
       { label: "Dự án", value: item.project.name },
       { label: "Block", value: item.blockName || "-" },
       { label: "Tầng", value: item.floorNo ?? "-" },
       { label: "Phòng ngủ", value: item.bedroomCount ?? "-" },
       { label: "Phòng tắm", value: item.bathroomCount ?? "-" },
-      { label: "DT Gross", value: item.areaGross ? `${item.areaGross} m²` : "-" },
-      { label: "DT Net", value: item.areaNet ? `${item.areaNet} m²` : "-" },
+      {
+        label: "Diện tích gross",
+        value: item.areaGross ? `${item.areaGross} m²` : "-",
+      },
+      {
+        label: "Diện tích net",
+        value: item.areaNet ? `${item.areaNet} m²` : "-",
+      },
       {
         label: "Giá bán",
         value: item.price ? formatMoneyShort(item.price) : "Liên hệ",
       },
-      { label: "Tồn kho", value: item.inventoryStatus },
       { label: "Hướng", value: item.orientation || "-" },
       { label: "Pháp lý", value: item.legalStatus || "-" },
+      { label: "Trạng thái", value: item.inventoryStatus },
     ];
   }, [item]);
 
-  if (isLoading) {
-    return <div>Đang tải chi tiết sản phẩm...</div>;
-  }
-
-  if (errorMessage) {
-    return <div style={styles.error}>{errorMessage}</div>;
-  }
-
-  if (!item) {
-    return <div>Không có dữ liệu</div>;
-  }
+  if (isLoading) return <div style={styles.loading}>Đang tải chi tiết...</div>;
+  if (errorMessage) return <div style={styles.error}>{errorMessage}</div>;
+  if (!item) return <div style={styles.empty}>Không tìm thấy dữ liệu</div>;
 
   return (
     <div style={styles.page}>
       <div style={styles.header}>
-        <div>
-          <h1 style={styles.title}>
-            {item.code} - {item.title}
-          </h1>
-          <div style={styles.sub}>
-            {item.project.name} · {item.inventoryStatus}
-          </div>
-        </div>
+        <button onClick={() => navigate(-1)} style={styles.backBtn}>
+          ← Quay lại
+        </button>
 
-        <Link to="/seller/properties" style={styles.backBtn}>
-          Quay lại danh sách
-        </Link>
+        <button onClick={handleSave} style={styles.saveBtn}>
+          ❤️ Lưu quan tâm
+        </button>
       </div>
 
       <section style={styles.hero}>
         <div style={styles.heroGrid}>
           <div style={styles.galleryCol}>
             {activeImageUrl ? (
-              <img
-                src={activeImageUrl}
-                alt={item.title}
-                style={styles.mainImage}
-              />
+              <img src={activeImageUrl} alt={item.title} style={styles.mainImage} />
             ) : (
               <div style={styles.mainPlaceholder}>NO IMAGE</div>
             )}
 
-            <div style={styles.thumbRow}>
-              {item.images.map((image) => (
-                <button
-                  key={image.id}
-                  type="button"
-                  style={{
-                    ...styles.thumbBtn,
-                    ...(activeImageUrl === image.url ? styles.thumbBtnActive : {}),
-                  }}
-                  onClick={() => setActiveImageUrl(image.url)}
-                >
-                  <img
-                    src={image.url}
-                    alt={image.originalName}
-                    style={styles.thumbImage}
-                  />
-                </button>
-              ))}
-
-              {item.images.length === 0 ? (
-                <div style={styles.empty}>Chưa có ảnh sản phẩm</div>
-              ) : null}
-            </div>
+            {item.images.length > 0 ? (
+              <div style={styles.thumbRow}>
+                {item.images.map((image) => (
+                  <button
+                    key={image.id}
+                    type="button"
+                    style={{
+                      ...styles.thumbBtn,
+                      border:
+                        activeImageUrl === image.url
+                          ? "2px solid #cf2027"
+                          : "1px solid #ddd",
+                    }}
+                    onClick={() => setActiveImageUrl(image.url)}
+                  >
+                    <img
+                      src={image.url}
+                      alt={image.originalName || item.title}
+                      style={styles.thumbImage}
+                    />
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </div>
 
           <div style={styles.summaryCol}>
-            <div style={styles.cardTitle}>Thông tin sản phẩm</div>
+            <div style={styles.projectName}>{item.project.name}</div>
+            <div style={styles.cardTitle}>{item.title}</div>
 
             <div style={styles.infoGrid}>
               {summaryRows.map((row) => (
@@ -143,69 +160,58 @@ export default function PropertyDetailPage() {
             </div>
 
             <div style={styles.noteBox}>
-              <div style={styles.infoLabel}>Mô tả</div>
+              <strong>Mô tả sản phẩm:</strong>
               <div style={styles.noteValue}>
-                {item.description || "Chưa có mô tả sản phẩm"}
+                {item.description || "Đang cập nhật..."}
               </div>
             </div>
           </div>
-        </div>
-      </section>
-
-      <section style={styles.card}>
-        <div style={styles.cardTitle}>Liên kết dự án</div>
-        <div style={styles.projectBox}>
-          <div style={styles.projectName}>{item.project.name}</div>
-          <div style={styles.projectMeta}>Slug: {item.project.slug}</div>
         </div>
       </section>
     </div>
   );
 }
 
-const styles: Record<string, React.CSSProperties> = {
+const styles: Record<string, CSSProperties> = {
   page: {
-    display: "grid",
-    gap: 20,
+    maxWidth: 1200,
+    margin: "0 auto",
+    padding: "40px 20px",
   },
   header: {
     display: "flex",
     justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: 16,
-  },
-  title: {
-    margin: 0,
-    fontSize: 34,
-    fontWeight: 800,
-    color: "#111827",
-  },
-  sub: {
-    marginTop: 6,
-    color: "#6b7280",
-    fontSize: 15,
+    marginBottom: 24,
+    gap: 12,
   },
   backBtn: {
-    textDecoration: "none",
+    padding: "10px 20px",
+    borderRadius: 8,
+    border: "1px solid #ddd",
     background: "#fff",
-    color: "#111827",
-    border: "1px solid #d1d5db",
-    borderRadius: 12,
-    padding: "10px 16px",
+    cursor: "pointer",
+    fontWeight: 600,
+  },
+  saveBtn: {
+    padding: "10px 24px",
+    borderRadius: 8,
+    border: "none",
+    background: "#cf2027",
+    color: "#fff",
+    cursor: "pointer",
     fontWeight: 700,
   },
   hero: {
     background: "#fff",
-    borderRadius: 24,
-    padding: 20,
-    border: "1px solid #e5e7eb",
-    boxShadow: "0 10px 30px rgba(0,0,0,0.04)",
+    borderRadius: 20,
+    padding: 24,
+    border: "1px solid #eee",
+    boxShadow: "0 4px 20px rgba(0,0,0,0.05)",
   },
   heroGrid: {
     display: "grid",
-    gridTemplateColumns: "1.05fr 1fr",
-    gap: 20,
-    alignItems: "start",
+    gridTemplateColumns: "1.1fr 0.9fr",
+    gap: 32,
   },
   galleryCol: {
     display: "grid",
@@ -213,21 +219,18 @@ const styles: Record<string, React.CSSProperties> = {
   },
   mainImage: {
     width: "100%",
-    height: 420,
+    height: 450,
     objectFit: "cover",
-    borderRadius: 20,
-    border: "1px solid #e5e7eb",
+    borderRadius: 16,
   },
   mainPlaceholder: {
     width: "100%",
-    height: 420,
+    height: 450,
     display: "grid",
     placeItems: "center",
-    borderRadius: 20,
-    border: "1px dashed #d1d5db",
-    background: "#f9fafb",
-    color: "#6b7280",
-    fontWeight: 700,
+    background: "#f3f4f6",
+    borderRadius: 16,
+    color: "#999",
   },
   thumbRow: {
     display: "flex",
@@ -235,101 +238,87 @@ const styles: Record<string, React.CSSProperties> = {
     flexWrap: "wrap",
   },
   thumbBtn: {
-    width: 86,
-    height: 64,
+    width: 80,
+    height: 60,
     padding: 0,
-    borderRadius: 12,
+    borderRadius: 8,
     overflow: "hidden",
-    border: "1px solid #d1d5db",
-    background: "#fff",
     cursor: "pointer",
-  },
-  thumbBtnActive: {
-    border: "2px solid #2388ff",
+    background: "none",
   },
   thumbImage: {
     width: "100%",
     height: "100%",
     objectFit: "cover",
-    display: "block",
   },
   summaryCol: {
     display: "grid",
-    gap: 16,
+    alignContent: "start",
+    gap: 20,
   },
-  card: {
-    background: "#fff",
-    borderRadius: 24,
-    padding: 20,
-    border: "1px solid #e5e7eb",
-    boxShadow: "0 10px 30px rgba(0,0,0,0.04)",
+  projectName: {
+    fontSize: 14,
+    fontWeight: 700,
+    color: "#cf2027",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
   },
   cardTitle: {
-    fontSize: 20,
-    fontWeight: 800,
-    color: "#111827",
-    marginBottom: 14,
+    fontSize: 28,
+    fontWeight: 700,
+    color: "#111",
+    marginTop: -8,
   },
   infoGrid: {
     display: "grid",
     gridTemplateColumns: "1fr 1fr",
-    gap: 14,
+    gap: 16,
   },
   infoItem: {
-    display: "grid",
-    gap: 4,
-    padding: 12,
-    borderRadius: 14,
+    padding: "14px",
     background: "#f9fafb",
+    borderRadius: 12,
   },
   infoLabel: {
     fontSize: 12,
-    color: "#6b7280",
-    fontWeight: 700,
+    color: "#666",
     textTransform: "uppercase",
+    fontWeight: 600,
+    marginBottom: 4,
   },
   infoValue: {
-    fontSize: 15,
-    color: "#111827",
+    fontSize: 16,
     fontWeight: 700,
+    color: "#111",
   },
   noteBox: {
-    padding: 14,
-    borderRadius: 16,
+    marginTop: 10,
+    padding: 20,
     background: "#f9fafb",
-    display: "grid",
-    gap: 6,
+    borderRadius: 12,
   },
   noteValue: {
-    fontSize: 15,
+    marginTop: 8,
     lineHeight: 1.6,
-    color: "#374151",
-    whiteSpace: "pre-wrap",
+    color: "#444",
   },
-  projectBox: {
-    padding: 14,
-    borderRadius: 16,
-    background: "#f9fafb",
-  },
-  projectName: {
+  loading: {
+    padding: 100,
+    textAlign: "center",
     fontSize: 18,
-    fontWeight: 800,
-    color: "#111827",
-  },
-  projectMeta: {
-    marginTop: 6,
-    fontSize: 13,
-    color: "#6b7280",
+    color: "#666",
   },
   error: {
     color: "#991b1b",
     background: "#fef2f2",
-    border: "1px solid #fecaca",
-    padding: 12,
+    padding: 20,
     borderRadius: 12,
+    textAlign: "center",
   },
   empty: {
-    color: "#6b7280",
-    padding: 8,
+    padding: 100,
+    textAlign: "center",
+    fontSize: 18,
+    color: "#666",
   },
 };

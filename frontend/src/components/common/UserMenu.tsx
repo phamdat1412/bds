@@ -1,3 +1,5 @@
+// path: frontend/src/components/common/UserMenu.tsx
+import { Link } from "react-router-dom";
 import { useAuth } from "../../app/AuthContext";
 
 function getRoleLabel(roles: string[]) {
@@ -10,18 +12,30 @@ function getRoleLabel(roles: string[]) {
 export default function UserMenu() {
   const { user, roles, logout } = useAuth();
 
+  const dashboardLink = roles.includes("admin")
+    ? "/admin/dashboard"
+    : roles.includes("seller")
+    ? "/seller/dashboard"
+    : "/user";
+
   function handleLogout() {
-  logout();
-  window.location.replace("/login");
-}
+    logout();
+    window.location.replace("/login");
+  }
 
   return (
     <div style={styles.wrap}>
-      <div style={styles.info}>
-        <div style={styles.name}>
-          {user?.email || user?.phone || "Người dùng"}
+      <div style={styles.userCluster}>
+        <div style={styles.info}>
+          <div style={styles.name}>
+            {user?.email || user?.phone || "Người dùng"}
+          </div>
+          <div style={styles.role}>{getRoleLabel(roles)}</div>
         </div>
-        <div style={styles.role}>{getRoleLabel(roles)}</div>
+
+        <Link to={dashboardLink} style={styles.mgmtBtn}>
+          Quản lý
+        </Link>
       </div>
 
       <button type="button" style={styles.logoutBtn} onClick={handleLogout}>
@@ -33,6 +47,15 @@ export default function UserMenu() {
 
 const styles: Record<string, React.CSSProperties> = {
   wrap: {
+    display: "flex",
+    alignItems: "center",
+    gap: 16,
+    background: "#fff",
+    padding: "4px 4px 4px 12px",
+    borderRadius: 12,
+    border: "1px solid #ececec",
+  },
+  userCluster: {
     display: "flex",
     alignItems: "center",
     gap: 12,
@@ -48,17 +71,27 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#111827",
   },
   role: {
-    fontSize: 12,
+    fontSize: 11,
     color: "#6b7280",
+    textTransform: "uppercase",
+  },
+  mgmtBtn: {
+    textDecoration: "none",
+    fontSize: 13,
+    fontWeight: 700,
+    color: "#fff",
+    background: "#cf2027",
+    padding: "6px 12px",
+    borderRadius: 8,
   },
   logoutBtn: {
-    height: 38,
-    border: "1px solid #d1d5db",
-    borderRadius: 10,
-    background: "#fff",
-    color: "#111827",
-    padding: "0 12px",
+    height: 34,
+    border: "none",
+    background: "transparent",
+    color: "#6b7280",
+    padding: "0 8px",
     cursor: "pointer",
     fontWeight: 700,
+    fontSize: 13,
   },
 };

@@ -1,6 +1,6 @@
 import { NextFunction, Request, Response } from "express";
 import {
- assignLead,
+  assignLead,
   createLead,
   createLeadActivity,
   deleteLead,
@@ -17,11 +17,13 @@ import {
   validateUpdateLeadStatusInput,
 } from "./leads.validators.js";
 import { parsePagination } from "../../utils/pagination.js";
+
 type AuthenticatedRequest = Request & {
-  authUser?: {
+  user?: {
     userId: string;
     email: string | null;
     userType: "customer" | "staff";
+    roles?: string[];
   };
 };
 
@@ -49,6 +51,19 @@ function getQueryAsString(value: unknown): string | undefined {
   return undefined;
 }
 
+function getActor(req: AuthenticatedRequest) {
+  if (!req.user?.userId) {
+    return null;
+  }
+
+  return {
+    userId: req.user.userId,
+    email: req.user.email,
+    userType: req.user.userType,
+    roles: req.user.roles || [],
+  };
+}
+
 export async function createLeadHandler(
   req: AuthenticatedRequest,
   res: Response,
@@ -65,14 +80,19 @@ export async function createLeadHandler(
       });
     }
 
-    if (!req.authUser) {
+    const actor = getActor(req);
+
+    if (!actor) {
       return res.status(401).json({
         success: false,
         message: "Unauthorized",
       });
     }
 
-    const data = await createLead(req.body, req.authUser.userId);
+    const data = await createLead(req.body, {
+      userId: actor.userId,
+      roles: actor.roles,
+    });
 
     return res.status(201).json({
       success: true,
@@ -84,46 +104,21 @@ export async function createLeadHandler(
   }
 }
 
-// export async function listLeadsHandler(
-//   req: AuthenticatedRequest,
-//   res: Response,
-//   next: NextFunction
-// ) {
-//   try {
-//     const status = getQueryAsString(req.query.status);
-//     const source = getQueryAsString(req.query.source);
-//     const keyword = getQueryAsString(req.query.keyword);
-//     const assignedToUserId = getQueryAsString(req.query.assignedToUserId);
-
-//     const data = await listLeads({
-//       status: status as
-//         | "new"
-//         | "contacted"
-//         | "qualified"
-//         | "unqualified"
-//         | "converted"
-//         | "lost"
-//         | undefined,
-//       source,
-//       keyword,
-//       assignedToUserId,
-//     });
-
-//     return res.json({
-//       success: true,
-//       message: "Leads fetched successfully",
-//       data,
-//     });
-//   } catch (error) {
-//     return next(error);
-//   }
-// }
 export async function listLeadsHandler(
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
 ) {
   try {
+    const actor = getActor(req);
+
+    if (!actor) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
+
     const { page, pageSize } = parsePagination({
       page: req.query.page,
       pageSize: req.query.pageSize,
@@ -134,21 +129,27 @@ export async function listLeadsHandler(
     const keyword = getQueryAsString(req.query.keyword);
     const assignedToUserId = getQueryAsString(req.query.assignedToUserId);
 
-    const data = await listLeads({
-      status: status as
-        | "new"
-        | "contacted"
-        | "qualified"
-        | "unqualified"
-        | "converted"
-        | "lost"
-        | undefined,
-      source,
-      keyword,
-      assignedToUserId,
-      page,
-      pageSize,
-    });
+    const data = await listLeads(
+      {
+        status: status as
+          | "new"
+          | "contacted"
+          | "qualified"
+          | "unqualified"
+          | "converted"
+          | "lost"
+          | undefined,
+        source,
+        keyword,
+        assignedToUserId,
+        page,
+        pageSize,
+      },
+      {
+        userId: actor.userId,
+        roles: actor.roles,
+      }
+    );
 
     return res.json({
       success: true,
@@ -159,14 +160,27 @@ export async function listLeadsHandler(
     return next(error);
   }
 }
+
 export async function getLeadDetailHandler(
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
 ) {
   try {
+    const actor = getActor(req);
+
+    if (!actor) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
+
     const leadId = getParamAsString(req.params.id);
-    const data = await getLeadDetail(leadId);
+    const data = await getLeadDetail(leadId, {
+      userId: actor.userId,
+      roles: actor.roles,
+    });
 
     return res.json({
       success: true,
@@ -194,8 +208,20 @@ export async function updateLeadStatusHandler(
       });
     }
 
+    const actor = getActor(req);
+
+    if (!actor) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
+
     const leadId = getParamAsString(req.params.id);
-    const data = await updateLeadStatus(leadId, req.body);
+    const data = await updateLeadStatus(leadId, req.body, {
+      userId: actor.userId,
+      roles: actor.roles,
+    });
 
     return res.json({
       success: true,
@@ -223,7 +249,9 @@ export async function assignLeadHandler(
       });
     }
 
-    if (!req.authUser) {
+    const actor = getActor(req);
+
+    if (!actor) {
       return res.status(401).json({
         success: false,
         message: "Unauthorized",
@@ -231,7 +259,7 @@ export async function assignLeadHandler(
     }
 
     const leadId = getParamAsString(req.params.id);
-    const data = await assignLead(leadId, req.body, req.authUser.userId);
+    const data = await assignLead(leadId, req.body, actor.userId);
 
     return res.json({
       success: true,
@@ -259,7 +287,9 @@ export async function createLeadActivityHandler(
       });
     }
 
-    if (!req.authUser) {
+    const actor = getActor(req);
+
+    if (!actor) {
       return res.status(401).json({
         success: false,
         message: "Unauthorized",
@@ -267,7 +297,10 @@ export async function createLeadActivityHandler(
     }
 
     const leadId = getParamAsString(req.params.id);
-    const data = await createLeadActivity(leadId, req.body, req.authUser.userId);
+    const data = await createLeadActivity(leadId, req.body, {
+      userId: actor.userId,
+      roles: actor.roles,
+    });
 
     return res.status(201).json({
       success: true,
@@ -278,6 +311,7 @@ export async function createLeadActivityHandler(
     return next(error);
   }
 }
+
 export async function updateLeadHandler(
   req: AuthenticatedRequest,
   res: Response,
@@ -294,8 +328,20 @@ export async function updateLeadHandler(
       });
     }
 
+    const actor = getActor(req);
+
+    if (!actor) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
+
     const leadId = getParamAsString(req.params.id);
-    const data = await updateLead(leadId, req.body);
+    const data = await updateLead(leadId, req.body, {
+      userId: actor.userId,
+      roles: actor.roles,
+    });
 
     return res.json({
       success: true,

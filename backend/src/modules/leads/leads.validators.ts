@@ -1,7 +1,8 @@
-import {
+import type {
   AssignLeadInput,
   CreateLeadActivityInput,
   CreateLeadInput,
+  UpdateLeadInput,
   UpdateLeadStatusInput,
 } from "./leads.types.js";
 
@@ -58,7 +59,6 @@ export function validateCreateLeadActivityInput(input: CreateLeadActivityInput) 
 
   return errors;
 }
-import { UpdateLeadInput } from "./leads.types.js";
 
 export function validateUpdateLeadInput(input: UpdateLeadInput) {
   const errors: string[] = [];

@@ -1,15 +1,60 @@
 import prisma from "../../configs/prisma.js";
 import { hashPassword } from "../../utils/password.js";
-import { CreateStaffInput, UserListQuery } from "./users.types.js";
+import { buildPaginationMeta } from "../../utils/pagination.js";
+import {
+  CreateStaffInput,
+  UpdateMyCustomerProfileInput,
+  UpdateUserInput,
+  UserListQuery,
+} from "./users.types.js";
 
-export async function createStaff(input: CreateStaffInput) {
-  const email = input.email?.trim().toLowerCase() || null;
-  const phone = input.phone?.trim() || null;
-  const roleCode = input.roleCode.trim().toLowerCase();
+function mapUserResponse(user: any) {
+  return {
+    id: user.id.toString(),
+    email: user.email,
+    phone: user.phone,
+    userType: user.userType,
+    status: user.status,
+    lastLoginAt: user.lastLoginAt,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
+    customerProfile: user.customerProfile
+      ? {
+          id: user.customerProfile.id.toString(),
+          fullName: user.customerProfile.fullName,
+          source: user.customerProfile.source ?? null,
+          province: user.customerProfile.province ?? null,
+          createdAt: user.customerProfile.createdAt,
+          updatedAt: user.customerProfile.updatedAt,
+        }
+      : null,
+    roles: user.roles.map((item: any) => ({
+      id: item.role.id.toString(),
+      code: item.role.code,
+      name: item.role.name,
+    })),
+  };
+}
+
+async function findRoleByCode(roleCode: string) {
+  return prisma.role.findUnique({
+    where: { code: roleCode.trim().toLowerCase() },
+  });
+}
+
+async function ensureUniqueEmailAndPhone(params: {
+  email?: string | null;
+  phone?: string | null;
+  excludeUserId?: bigint;
+}) {
+  const { email, phone, excludeUserId } = params;
 
   if (email) {
-    const existingByEmail = await prisma.user.findUnique({
-      where: { email },
+    const existingByEmail = await prisma.user.findFirst({
+      where: {
+        email,
+        ...(excludeUserId ? { NOT: { id: excludeUserId } } : {}),
+      },
     });
 
     if (existingByEmail) {
@@ -18,18 +63,27 @@ export async function createStaff(input: CreateStaffInput) {
   }
 
   if (phone) {
-    const existingByPhone = await prisma.user.findUnique({
-      where: { phone },
+    const existingByPhone = await prisma.user.findFirst({
+      where: {
+        phone,
+        ...(excludeUserId ? { NOT: { id: excludeUserId } } : {}),
+      },
     });
 
     if (existingByPhone) {
       throw new Error("Phone already exists");
     }
   }
+}
 
-  const role = await prisma.role.findUnique({
-    where: { code: roleCode },
-  });
+export async function createStaff(input: CreateStaffInput) {
+  const email = input.email?.trim().toLowerCase() || null;
+  const phone = input.phone?.trim() || null;
+  const roleCode = input.roleCode.trim().toLowerCase();
+
+  await ensureUniqueEmailAndPhone({ email, phone });
+
+  const role = await findRoleByCode(roleCode);
 
   if (!role) {
     throw new Error("Role not found");
@@ -51,6 +105,7 @@ export async function createStaff(input: CreateStaffInput) {
       },
     },
     include: {
+      customerProfile: true,
       roles: {
         include: {
           role: true,
@@ -59,78 +114,8 @@ export async function createStaff(input: CreateStaffInput) {
     },
   });
 
-  return {
-    id: createdUser.id.toString(),
-    email: createdUser.email,
-    phone: createdUser.phone,
-    userType: createdUser.userType,
-    status: createdUser.status,
-    roles: createdUser.roles.map((item) => ({
-      id: item.role.id.toString(),
-      code: item.role.code,
-      name: item.role.name,
-    })),
-  };
+  return mapUserResponse(createdUser);
 }
-
-// export async function listUsers(query: UserListQuery) {
-//   const keyword = query.keyword?.trim() || undefined;
-
-//   const users = await prisma.user.findMany({
-//     where: {
-//       ...(query.userType ? { userType: query.userType } : {}),
-//       ...(query.status ? { status: query.status } : {}),
-//       ...(keyword
-//         ? {
-//             OR: [
-//               { email: { contains: keyword } },
-//               { phone: { contains: keyword } },
-//               {
-//                 customerProfile: {
-//                   fullName: { contains: keyword },
-//                 },
-//               },
-//             ],
-//           }
-//         : {}),
-//     },
-//     include: {
-//       customerProfile: true,
-//       roles: {
-//         include: {
-//           role: true,
-//         },
-//       },
-//     },
-//     orderBy: {
-//       createdAt: "desc",
-//     },
-//   });
-
-//   return users.map((user) => ({
-//     id: user.id.toString(),
-//     email: user.email,
-//     phone: user.phone,
-//     userType: user.userType,
-//     status: user.status,
-//     lastLoginAt: user.lastLoginAt,
-//     createdAt: user.createdAt,
-//     customerProfile: user.customerProfile
-//       ? {
-//           id: user.customerProfile.id.toString(),
-//           fullName: user.customerProfile.fullName,
-//           source: user.customerProfile.source,
-//           province: user.customerProfile.province,
-//         }
-//       : null,
-//     roles: user.roles.map((item) => ({
-//       id: item.role.id.toString(),
-//       code: item.role.code,
-//       name: item.role.name,
-//     })),
-//   }));
-// }
-import { buildPaginationMeta } from "../../utils/pagination.js";
 
 export async function listUsers(query: UserListQuery) {
   const keyword = query.keyword?.trim() || undefined;
@@ -178,31 +163,11 @@ export async function listUsers(query: UserListQuery) {
   ]);
 
   return {
-    items: users.map((user) => ({
-      id: user.id.toString(),
-      email: user.email,
-      phone: user.phone,
-      userType: user.userType,
-      status: user.status,
-      lastLoginAt: user.lastLoginAt,
-      createdAt: user.createdAt,
-      customerProfile: user.customerProfile
-        ? {
-            id: user.customerProfile.id.toString(),
-            fullName: user.customerProfile.fullName,
-            source: user.customerProfile.source,
-            province: user.customerProfile.province,
-          }
-        : null,
-      roles: user.roles.map((item) => ({
-        id: item.role.id.toString(),
-        code: item.role.code,
-        name: item.role.name,
-      })),
-    })),
+    items: users.map(mapUserResponse),
     pagination: buildPaginationMeta(page, pageSize, totalItems),
   };
 }
+
 export async function getMyCustomerProfile(userId: string) {
   const user = await prisma.user.findUnique({
     where: { id: BigInt(userId) },
@@ -242,14 +207,12 @@ export async function getMyCustomerProfile(userId: string) {
 
 export async function updateMyCustomerProfile(
   userId: string,
-  input: {
-    fullName?: string;
-    email?: string;
-    phone?: string;
-  }
+  input: UpdateMyCustomerProfileInput
 ) {
+  const userIdBigInt = BigInt(userId);
+
   const existingUser = await prisma.user.findUnique({
-    where: { id: BigInt(userId) },
+    where: { id: userIdBigInt },
     include: {
       customerProfile: true,
       roles: {
@@ -264,37 +227,52 @@ export async function updateMyCustomerProfile(
     throw new Error("User not found");
   }
 
+  const email =
+    input.email !== undefined
+      ? input.email?.trim().toLowerCase() || null
+      : undefined;
+
+  const phone =
+    input.phone !== undefined
+      ? input.phone?.trim() || null
+      : undefined;
+
   const trimmedFullName = input.fullName?.trim();
 
-  if (!existingUser.customerProfile && !trimmedFullName) {
-    throw new Error("Full name is required");
-  }
+  await ensureUniqueEmailAndPhone({
+    email,
+    phone,
+    excludeUserId: userIdBigInt,
+  });
 
-  const customerProfileData = existingUser.customerProfile
-    ? {
+  const data: any = {
+    ...(input.email !== undefined ? { email } : {}),
+    ...(input.phone !== undefined ? { phone } : {}),
+  };
+
+  if (existingUser.customerProfile) {
+    if (input.fullName !== undefined && trimmedFullName) {
+      data.customerProfile = {
         update: {
-          ...(input.fullName !== undefined && trimmedFullName
-            ? { fullName: trimmedFullName }
-            : {}),
-        },
-      }
-    : {
-        create: {
-          fullName: trimmedFullName!,
+          fullName: trimmedFullName,
         },
       };
+    }
+  } else {
+    if (!trimmedFullName) {
+      throw new Error("Full name is required");
+    }
+
+    data.customerProfile = {
+      create: {
+        fullName: trimmedFullName,
+      },
+    };
+  }
 
   const updatedUser = await prisma.user.update({
-    where: { id: BigInt(userId) },
-    data: {
-      ...(input.email !== undefined
-        ? { email: input.email?.trim().toLowerCase() || null }
-        : {}),
-      ...(input.phone !== undefined
-        ? { phone: input.phone?.trim() || null }
-        : {}),
-      customerProfile: customerProfileData,
-    },
+    where: { id: userIdBigInt },
+    data,
     include: {
       customerProfile: true,
       roles: {
@@ -323,4 +301,141 @@ export async function updateMyCustomerProfile(
     createdAt: updatedUser.createdAt,
     updatedAt: updatedUser.updatedAt,
   };
+}
+
+export async function updateUserByAdmin(userId: string, input: UpdateUserInput) {
+  const userIdBigInt = BigInt(userId);
+
+  const existingUser = await prisma.user.findUnique({
+    where: { id: userIdBigInt },
+    include: {
+      customerProfile: true,
+      roles: {
+        include: {
+          role: true,
+        },
+      },
+    },
+  });
+
+  if (!existingUser) {
+    throw new Error("User not found");
+  }
+
+  const email =
+    input.email !== undefined
+      ? input.email?.trim().toLowerCase() || null
+      : undefined;
+
+  const phone =
+    input.phone !== undefined
+      ? input.phone?.trim() || null
+      : undefined;
+
+  const fullName = input.fullName?.trim();
+
+  await ensureUniqueEmailAndPhone({
+    email,
+    phone,
+    excludeUserId: userIdBigInt,
+  });
+
+  const data: any = {
+    ...(input.email !== undefined ? { email } : {}),
+    ...(input.phone !== undefined ? { phone } : {}),
+    ...(input.status !== undefined ? { status: input.status } : {}),
+  };
+
+  if (input.password && input.password.trim()) {
+    data.passwordHash = await hashPassword(input.password);
+  }
+
+  if (input.fullName !== undefined) {
+    if (existingUser.customerProfile) {
+      if (fullName) {
+        data.customerProfile = {
+          update: {
+            fullName,
+          },
+        };
+      }
+    } else if (fullName) {
+      data.customerProfile = {
+        create: {
+          fullName,
+        },
+      };
+    }
+  }
+
+  await prisma.user.update({
+    where: { id: userIdBigInt },
+    data,
+  });
+
+  if (input.roleCode !== undefined && existingUser.userType === "staff") {
+    const role = await findRoleByCode(input.roleCode);
+
+    if (!role) {
+      throw new Error("Role not found");
+    }
+
+    await prisma.userRole.deleteMany({
+      where: { userId: userIdBigInt },
+    });
+
+    await prisma.userRole.create({
+      data: {
+        userId: userIdBigInt,
+        roleId: role.id,
+      },
+    });
+  }
+
+  const finalUser = await prisma.user.findUnique({
+    where: { id: userIdBigInt },
+    include: {
+      customerProfile: true,
+      roles: {
+        include: {
+          role: true,
+        },
+      },
+    },
+  });
+
+  if (!finalUser) {
+    throw new Error("User not found after update");
+  }
+
+  return mapUserResponse(finalUser);
+}
+
+export async function deleteUserByAdmin(userId: string) {
+  const userIdBigInt = BigInt(userId);
+
+  const existingUser = await prisma.user.findUnique({
+    where: { id: userIdBigInt },
+  });
+
+  if (!existingUser) {
+    throw new Error("User not found");
+  }
+
+  const updatedUser = await prisma.user.update({
+    where: { id: userIdBigInt },
+    data: {
+      status: "blocked",
+    },
+    include: {
+      customerProfile: true,
+      roles: {
+        include: {
+          role: true,
+        },
+      },
+    },
+  });
+
+  return mapUserResponse(updatedUser);
 }

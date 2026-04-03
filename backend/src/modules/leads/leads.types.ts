@@ -31,6 +31,7 @@ export type LeadListQuery = {
   page?: number;
   pageSize?: number;
 };
+
 export type UpdateLeadInput = {
   fullName?: string;
   phone?: string;

@@ -17,6 +17,7 @@ import { formatMoneyShort } from "../../utils/formatMoneyShort";
 import Modal from "../../components/ui/Modal";
 import StatusBadge from "../../components/ui/StatusBadge";
 import Pagination from "../../components/ui/Pagination";
+import PropertyImagesManager from "./PropertyImagesManager"; // Import trình quản lý ảnh
 
 type ProjectOption = {
   id: string;
@@ -71,6 +72,10 @@ export default function PropertiesPage() {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<PropertyItem | null>(null);
+  
+  // STATE MỚI: Quản lý Modal chứa chức năng sửa ảnh
+  const [imageModalPropertyId, setImageModalPropertyId] = useState<string | null>(null);
+
   const [form, setForm] = useState(emptyForm);
 
   const [page, setPage] = useState(1);
@@ -178,6 +183,17 @@ export default function PropertiesPage() {
     setIsModalOpen(false);
     setEditingItem(null);
     setForm(emptyForm);
+  }
+
+  // HÀM MỚI: Mở Modal quản lý ảnh
+  function openImageModal(propertyId: string) {
+    setImageModalPropertyId(propertyId);
+  }
+
+  // HÀM MỚI: Đóng Modal quản lý ảnh và tải lại danh sách để cập nhật ảnh bìa mới nhất
+  async function closeImageModal() {
+    setImageModalPropertyId(null);
+    await loadProperties(page);
   }
 
   async function handleFilterSubmit(event: FormEvent) {
@@ -388,11 +404,11 @@ export default function PropertiesPage() {
               <table style={styles.table}>
                 <thead>
                   <tr>
+                    <th style={styles.th}>Ảnh</th>
                     <th style={styles.th}>Mã căn</th>
                     <th style={styles.th}>Tên sản phẩm</th>
                     <th style={styles.th}>Dự án</th>
                     <th style={styles.th}>Loại</th>
-                    <th style={styles.th}>Block / Tầng</th>
                     <th style={styles.th}>Giá</th>
                     <th style={styles.th}>Tồn kho</th>
                     <th style={styles.th}>Hành động</th>
@@ -401,6 +417,19 @@ export default function PropertiesPage() {
                 <tbody>
                   {items.map((item) => (
                     <tr key={item.id} style={styles.tr}>
+                      {/* Cột hiển thị ảnh thu nhỏ */}
+                      <td style={styles.td}>
+                        {item.thumbnail?.url ? (
+                          <img 
+                            src={item.thumbnail.url} 
+                            alt={item.code} 
+                            style={styles.tinyThumb} 
+                          />
+                        ) : (
+                          <div style={styles.tinyThumbPlaceholder}>NO<br/>IMG</div>
+                        )}
+                      </td>
+                      
                       <td style={styles.td}>
                         <div style={styles.nameCell}>
                           <div style={styles.nameTitle}>{item.code}</div>
@@ -410,9 +439,6 @@ export default function PropertiesPage() {
                       <td style={styles.td}>{item.title}</td>
                       <td style={styles.td}>{item.project.name}</td>
                       <td style={styles.td}>{item.propertyType}</td>
-                      <td style={styles.td}>
-                        {[item.blockName, item.floorNo].filter(Boolean).join(" / ") || "-"}
-                      </td>
                       <td style={styles.td}>
                         {item.price ? formatMoneyShort(item.price) : "-"}
                       </td>
@@ -437,6 +463,14 @@ export default function PropertiesPage() {
                               </option>
                             ))}
                           </select>
+
+                          {/* NÚT QUẢN LÝ ẢNH MỚI */}
+                          <button
+                            style={styles.textBtn}
+                            onClick={() => openImageModal(item.id)}
+                          >
+                            Ảnh
+                          </button>
 
                           <button
                             style={styles.textBtn}
@@ -478,9 +512,10 @@ export default function PropertiesPage() {
         )}
       </section>
 
+      {/* MODAL 1: CHỈNH SỬA THÔNG TIN TEXT (Cũ) */}
       <Modal
         open={isModalOpen}
-        title={editingItem ? "Chỉnh sửa sản phẩm" : "Thêm sản phẩm mới"}
+        title={editingItem ? "Chỉnh sửa thông tin" : "Thêm sản phẩm mới"}
         onClose={closeModal}
       >
         <form onSubmit={handleSubmit} style={styles.modalForm}>
@@ -648,11 +683,25 @@ export default function PropertiesPage() {
               Hủy
             </button>
             <button type="submit" style={styles.primaryBtn}>
-              {editingItem ? "Lưu thay đổi" : "Tạo sản phẩm"}
+              {editingItem ? "Lưu thông tin" : "Tạo sản phẩm"}
             </button>
           </div>
         </form>
       </Modal>
+
+      {/* MODAL 2 MỚI: QUẢN LÝ ẢNH DÀNH RIÊNG */}
+      <Modal
+        open={!!imageModalPropertyId}
+        title="Quản lý ảnh sản phẩm"
+        onClose={closeImageModal}
+      >
+        {imageModalPropertyId && (
+          <div style={{ minWidth: 600, minHeight: 400 }}>
+             <PropertyImagesManager propertyId={imageModalPropertyId} />
+          </div>
+        )}
+      </Modal>
+
     </div>
   );
 }
@@ -879,4 +928,26 @@ const styles: Record<string, React.CSSProperties> = {
     padding: 28,
     color: "#6b7280",
   },
+  // Style mới cho ảnh thumbnail nhỏ xíu trong bảng
+  tinyThumb: {
+    width: 44,
+    height: 44,
+    objectFit: "cover",
+    borderRadius: 8,
+    border: "1px solid #e5e7eb",
+  },
+  tinyThumbPlaceholder: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    background: "#f3f4f6",
+    border: "1px dashed #d1d5db",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 10,
+    color: "#9ca3af",
+    textAlign: "center",
+    fontWeight: 700,
+  }
 };
