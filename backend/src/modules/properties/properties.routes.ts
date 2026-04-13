@@ -5,7 +5,6 @@ import {
   createPropertyHandler,
   deletePropertyHandler,
   getPropertyDetailHandler,
-  getPublicPropertyDetailHandler,
   listPropertiesHandler,
   updateInventoryStatusHandler,
   updatePropertyHandler,
@@ -14,10 +13,6 @@ import propertyImagesRouter from "../property-images/property-images.routes.js";
 
 const router = Router();
 
-// PUBLIC ROUTE
-router.get("/public/properties/:id", getPublicPropertyDetailHandler);
-
-// PRIVATE ROUTES
 router.use(authMiddleware);
 router.use("/:propertyId/images", propertyImagesRouter);
 

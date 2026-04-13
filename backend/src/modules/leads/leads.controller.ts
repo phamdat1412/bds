@@ -64,6 +64,34 @@ function getActor(req: AuthenticatedRequest) {
   };
 }
 
+export async function createPublicLeadHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    const errors = validateCreateLeadInput(req.body);
+
+    if (errors.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Validation error",
+        errors,
+      });
+    }
+
+    const data = await createLead(req.body, null);
+
+    return res.status(201).json({
+      success: true,
+      message: "Lead created successfully",
+      data,
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
 export async function createLeadHandler(
   req: AuthenticatedRequest,
   res: Response,

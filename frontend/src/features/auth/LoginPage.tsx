@@ -28,7 +28,7 @@ export default function LoginPage() {
         return;
       }
 
-      navigate("/user", { replace: true });
+      navigate("/", { replace: true });
     }
   }, [isAuthenticated, roles, isBootstrapping, navigate]);
 

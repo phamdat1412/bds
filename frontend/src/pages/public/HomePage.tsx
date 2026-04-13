@@ -1,133 +1,341 @@
 import { Link } from "react-router-dom";
-import type { CSSProperties } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import PublicSearchBox from "../../features/public/components/PublicSearchBox";
+
+type PublicProjectItem = {
+  id: string;
+  name: string;
+  slug: string;
+  city?: string | null;
+  district?: string | null;
+  locationText?: string | null;
+  shortDescription?: string | null;
+  projectType?: string | null;
+  thumbnailMedia?: {
+    url: string;
+  } | null;
+};
+
+type PublicNewsItem = {
+  id: string;
+  title: string;
+  slug: string;
+  summary?: string | null;
+  publishedAt?: string | null;
+  thumbnailMedia?: {
+    url: string;
+  } | null;
+};
+
+function getApiBaseUrl() {
+  return import.meta.env.VITE_API_BASE_URL || "http://localhost:4000/api/v1";
+}
+
+function normalizeProjectItems(payload: any): PublicProjectItem[] {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.data)) return payload.data;
+  if (Array.isArray(payload?.data?.items)) return payload.data.items;
+  return [];
+}
+
+function normalizeNewsItems(payload: any): PublicNewsItem[] {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.data)) return payload.data;
+  if (Array.isArray(payload?.data?.items)) return payload.data.items;
+  return [];
+}
+
+function formatDate(value?: string | null) {
+  if (!value) return "Đang cập nhật";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Đang cập nhật";
+  return date.toLocaleDateString("vi-VN");
+}
+
+function getProjectLocation(project: PublicProjectItem) {
+  return project.locationText || project.district || project.city || "Vị trí đang cập nhật";
+}
 
 export default function HomePage() {
+  const [projects, setProjects] = useState<PublicProjectItem[]>([]);
+  const [newsItems, setNewsItems] = useState<PublicNewsItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [heroIndex, setHeroIndex] = useState(0);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadHomeData() {
+      try {
+        setLoading(true);
+
+        const apiBaseUrl = getApiBaseUrl();
+
+        const [projectsRes, newsRes] = await Promise.all([
+          fetch(`${apiBaseUrl}/public/projects?page=1&pageSize=12`),
+          fetch(`${apiBaseUrl}/public/news?page=1&pageSize=4`),
+        ]);
+
+        const [projectsJson, newsJson] = await Promise.all([
+          projectsRes.json(),
+          newsRes.json(),
+        ]);
+
+        if (!isMounted) return;
+
+        setProjects(normalizeProjectItems(projectsJson));
+        setNewsItems(normalizeNewsItems(newsJson));
+      } catch (error) {
+        console.error("Load homepage data failed", error);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
+
+    loadHomeData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const heroImages = useMemo(() => {
+    const images = projects
+      .map((item) => item.thumbnailMedia?.url)
+      .filter((url): url is string => !!url)
+      .slice(0, 4);
+
+    if (images.length > 0) return images;
+
+    return [
+      "https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&w=1600&q=80",
+    ];
+  }, [projects]);
+
+  useEffect(() => {
+    if (heroImages.length <= 1) return;
+
+    const timer = window.setInterval(() => {
+      setHeroIndex((prev) => (prev + 1) % heroImages.length);
+    }, 4500);
+
+    return () => window.clearInterval(timer);
+  }, [heroImages]);
+
+  const featuredAreas = useMemo(() => {
+    const areaMap = new Map<string, { name: string; count: number }>();
+
+    projects.forEach((project) => {
+      const rawArea = project.district || project.city || project.locationText || "";
+      const area = rawArea.trim();
+
+      if (!area) return;
+
+      const current = areaMap.get(area);
+      if (current) {
+        current.count += 1;
+      } else {
+        areaMap.set(area, { name: area, count: 1 });
+      }
+    });
+
+    return Array.from(areaMap.values())
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 6);
+  }, [projects]);
+
+  const featuredProjects = useMemo(() => projects.slice(0, 6), [projects]);
+  const featuredNews = useMemo(() => newsItems.slice(0, 4), [newsItems]);
+
   return (
     <div style={styles.page}>
       <section style={styles.hero}>
-        <div style={styles.heroOverlay} />
+        {heroImages.map((image, index) => (
+          <div
+            key={`${image}-${index}`}
+            style={{
+              ...styles.heroBg,
+              backgroundImage: `url("${image}")`,
+              opacity: index === heroIndex ? 1 : 0,
+            }}
+          />
+        ))}
 
-        <div style={styles.heroContent}>
-          <div style={styles.kicker}>SGROUP REAL ESTATE</div>
+        <div style={styles.heroBackdrop} />
+        <div style={styles.heroShade} />
 
-          <h1 style={styles.title}>
-            Nền tảng tra cứu dự án và cập nhật thị trường bất động sản
+        <div style={styles.heroInner}>
+          <div style={styles.heroTopLine}>SGROUP REAL ESTATE PLATFORM</div>
+
+          <h1 style={styles.heroTitle}>
+            Kênh tra cứu dự án, tin thị trường và kết nối tư vấn bất động sản
           </h1>
 
-          <p style={styles.sub}>
-            Khám phá hệ thống dự án, thông tin quy hoạch, tin tức thị trường và
-            cơ hội đầu tư được cập nhật liên tục từ SGROUP.
+          <p style={styles.heroDesc}>
+            Tìm dự án phù hợp, cập nhật thị trường nhanh và gửi yêu cầu tư vấn
+            trong một trải nghiệm gọn, rõ và dễ dùng.
           </p>
 
-          <div style={styles.actions}>
+          <div style={styles.searchPanel}>
+            <div style={styles.searchTabs}>
+              <button type="button" style={{ ...styles.searchTab, ...styles.searchTabActive }}>
+                Nhà đất bán
+              </button>
+              <button type="button" style={styles.searchTab}>
+                Dự án
+              </button>
+              <button type="button" style={styles.searchTab}>
+                Tin tức
+              </button>
+            </div>
+
+            <div style={styles.searchBoxWrap}>
+              <PublicSearchBox placeholder="Tìm theo tên dự án, khu vực, loại hình..." />
+            </div>
+          </div>
+
+          <div style={styles.heroActions}>
             <Link to="/projects" style={styles.primaryBtn}>
-              Khám phá dự án
+              Xem danh sách dự án
             </Link>
             <Link to="/news" style={styles.secondaryBtn}>
-              Xem tin tức
+              Cập nhật tin thị trường
             </Link>
           </div>
         </div>
+      </section>
 
-        <div style={styles.heroStats}>
-          <div style={styles.statCard}>
-            <div style={styles.statNumber}>DỰ ÁN</div>
-            <div style={styles.statLabel}>Danh mục dự án đang cập nhật liên tục</div>
-          </div>
+      <section style={styles.section}>
+        <div style={styles.sectionHeader}>
+          <div style={styles.sectionKicker}>KHU VỰC NỔI BẬT</div>
+          <h2 style={styles.sectionTitle}>Bất động sản theo khu vực nổi bật</h2>
+        </div>
 
-          <div style={styles.statCard}>
-            <div style={styles.statNumber}>TIN TỨC</div>
-            <div style={styles.statLabel}>Thông tin thị trường và hoạt động nổi bật</div>
-          </div>
-
-          <div style={styles.statCard}>
-            <div style={styles.statNumber}>TƯ VẤN</div>
-            <div style={styles.statLabel}>Kết nối nhanh với đội ngũ SGROUP</div>
-          </div>
+        <div style={styles.areaGrid}>
+          {featuredAreas.length === 0 ? (
+            <div style={styles.emptyCard}>
+              {loading ? "Đang tải khu vực..." : "Chưa có dữ liệu khu vực"}
+            </div>
+          ) : (
+            featuredAreas.map((area) => (
+              <Link
+                key={area.name}
+                to={`/projects?keyword=${encodeURIComponent(area.name)}`}
+                style={styles.areaCard}
+              >
+                <div style={styles.areaName}>{area.name}</div>
+                <div style={styles.areaMeta}>{area.count} dự án</div>
+                <div style={styles.areaLink}>Xem khu vực →</div>
+              </Link>
+            ))
+          )}
         </div>
       </section>
 
-      <section style={styles.introSection}>
-        <div style={styles.sectionHeader}>
-          <div style={styles.sectionKicker}>GIỚI THIỆU</div>
-          <h2 style={styles.sectionTitle}>
-            Một điểm chạm gọn hơn cho hành trình tìm hiểu bất động sản
-          </h2>
+      <section style={styles.section}>
+        <div style={styles.sectionHeaderRow}>
+          <div style={styles.sectionHeader}>
+            <div style={styles.sectionKicker}>DỰ ÁN NỔI BẬT</div>
+            <h2 style={styles.sectionTitle}>Danh sách dự án đang được quan tâm</h2>
+          </div>
+
+          <Link to="/projects" style={styles.viewAllLink}>
+            Xem tất cả →
+          </Link>
         </div>
 
-        <div style={styles.introGrid}>
-          <div style={styles.introCardLarge}>
-            <div style={styles.cardTag}>VỀ SGROUP</div>
-            <h3 style={styles.cardTitle}>
-              Hệ thống thông tin giúp khách hàng tiếp cận dự án rõ ràng và trực quan hơn
-            </h3>
-            <p style={styles.cardDesc}>
-              Khu public được xây dựng để người dùng có thể xem dự án, theo dõi
-              tin tức, tìm hiểu thị trường và kết nối tư vấn trong một trải nghiệm
-              thống nhất, hiện đại và dễ sử dụng.
-            </p>
-          </div>
-
-          <div style={styles.introCard}>
-            <div style={styles.cardTag}>DỰ ÁN</div>
-            <p style={styles.smallCardText}>
-              Tổng hợp dự án nổi bật, vị trí, mô tả ngắn và lộ trình xem chi tiết.
-            </p>
-          </div>
-
-          <div style={styles.introCard}>
-            <div style={styles.cardTag}>TIN TỨC</div>
-            <p style={styles.smallCardText}>
-              Cập nhật chuyển động thị trường, hoạt động truyền thông và thông tin mới.
-            </p>
-          </div>
+        <div style={styles.projectGrid}>
+          {featuredProjects.length === 0 ? (
+            <div style={styles.emptyCard}>
+              {loading ? "Đang tải dự án..." : "Chưa có dự án nổi bật"}
+            </div>
+          ) : (
+            featuredProjects.map((project) => (
+              <Link key={project.id} to={`/projects/${project.slug}`} style={styles.projectCard}>
+                <div
+                  style={{
+                    ...styles.projectThumb,
+                    backgroundImage: project.thumbnailMedia?.url
+                      ? `url("${project.thumbnailMedia.url}")`
+                      : "linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%)",
+                  }}
+                />
+                <div style={styles.projectBody}>
+                  <div style={styles.projectType}>
+                    {project.projectType || "Dự án bất động sản"}
+                  </div>
+                  <h3 style={styles.projectTitle}>{project.name}</h3>
+                  <div style={styles.projectLocation}>{getProjectLocation(project)}</div>
+                  <p style={styles.projectDesc}>
+                    {project.shortDescription || "Thông tin dự án đang được cập nhật chi tiết trên hệ thống."}
+                  </p>
+                  <div style={styles.projectLink}>Xem chi tiết →</div>
+                </div>
+              </Link>
+            ))
+          )}
         </div>
       </section>
 
-      <section style={styles.navigationSection}>
-        <div style={styles.sectionHeader}>
-          <div style={styles.sectionKicker}>KHÁM PHÁ</div>
-          <h2 style={styles.sectionTitle}>Đi nhanh vào nhóm nội dung bạn cần</h2>
+      <section style={styles.section}>
+        <div style={styles.sectionHeaderRow}>
+          <div style={styles.sectionHeader}>
+            <div style={styles.sectionKicker}>TIN MỚI</div>
+            <h2 style={styles.sectionTitle}>Tin tức nổi bật</h2>
+          </div>
+
+          <Link to="/news" style={styles.viewAllLink}>
+            Xem tất cả →
+          </Link>
         </div>
 
-        <div style={styles.navigationGrid}>
-          <Link to="/projects" style={styles.navCard}>
-            <div style={styles.navCardTag}>01</div>
-            <h3 style={styles.navCardTitle}>Danh sách dự án</h3>
-            <p style={styles.navCardDesc}>
-              Xem các dự án đang mở bán, sẵn sàng bàn giao hoặc đang được quan tâm.
-            </p>
-            <div style={styles.navCardLink}>Truy cập trang dự án →</div>
-          </Link>
-
-          <Link to="/news" style={styles.navCard}>
-            <div style={styles.navCardTag}>02</div>
-            <h3 style={styles.navCardTitle}>Tin tức & sự kiện</h3>
-            <p style={styles.navCardDesc}>
-              Theo dõi thông tin thị trường, dự án và các hoạt động nổi bật của SGROUP.
-            </p>
-            <div style={styles.navCardLink}>Truy cập trang tin tức →</div>
-          </Link>
+        <div style={styles.newsGrid}>
+          {featuredNews.length === 0 ? (
+            <div style={styles.emptyCard}>
+              {loading ? "Đang tải tin tức..." : "Chưa có tin tức nổi bật"}
+            </div>
+          ) : (
+            featuredNews.map((item) => (
+              <Link key={item.id} to={`/news/${item.slug}`} style={styles.newsCard}>
+                <div
+                  style={{
+                    ...styles.newsThumb,
+                    backgroundImage: item.thumbnailMedia?.url
+                      ? `url("${item.thumbnailMedia.url}")`
+                      : "linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%)",
+                  }}
+                />
+                <div style={styles.newsBody}>
+                  <div style={styles.newsDate}>{formatDate(item.publishedAt)}</div>
+                  <h3 style={styles.newsTitle}>{item.title}</h3>
+                  <p style={styles.newsSummary}>
+                    {item.summary || "Cập nhật nội dung mới từ thị trường và hệ thống dự án."}
+                  </p>
+                  <div style={styles.newsLink}>Đọc tiếp →</div>
+                </div>
+              </Link>
+            ))
+          )}
         </div>
       </section>
 
       <section style={styles.ctaSection}>
         <div style={styles.ctaBox}>
-          <div style={styles.sectionKicker}>KẾT NỐI</div>
+          <div style={styles.sectionKickerLight}>BẮT ĐẦU NGAY</div>
           <h2 style={styles.ctaTitle}>
-            Bắt đầu từ một dự án phù hợp, hoặc một thông tin đủ đúng thời điểm
+            Từ một dự án phù hợp đến một quyết định đúng thời điểm
           </h2>
           <p style={styles.ctaDesc}>
-            SGROUP xây dựng khu vực public này để hành trình tìm hiểu bất động sản
-            của khách hàng trở nên trực quan, rõ ràng và hiệu quả hơn.
+            Tìm dự án, đọc tin thị trường hoặc gửi yêu cầu tư vấn để đội ngũ
+            SGROUP đồng hành cùng khách hàng trong hành trình an cư và đầu tư.
           </p>
 
-          <div style={styles.actions}>
-            <Link to="/projects" style={styles.primaryBtn}>
-              Xem dự án ngay
+          <div style={styles.ctaActions}>
+            <Link to="/projects" style={styles.ctaPrimaryBtn}>
+              Tìm dự án ngay
             </Link>
-            <Link to="/news" style={styles.secondaryBtn}>
-              Đọc tin mới
+            <Link to="/cart" style={styles.ctaSecondaryBtn}>
+              Gửi yêu cầu tư vấn
             </Link>
           </div>
         </div>
@@ -139,264 +347,363 @@ export default function HomePage() {
 const styles: Record<string, CSSProperties> = {
   page: {
     width: "100%",
-    maxWidth: 1320,
-    margin: "0 auto",
-    padding: "32px 20px 72px",
-    display: "grid",
-    gap: 40,
-    background: "#ffffff",
+    background: "#f6f7f9",
+    paddingBottom: 56,
   },
 
   hero: {
     position: "relative",
+    minHeight: 640,
     overflow: "hidden",
-    borderRadius: 32,
-    border: "1px solid #ececec",
-    background:
-      "linear-gradient(135deg, rgba(255,255,255,0.98) 0%, rgba(248,248,248,0.94) 50%, rgba(127,29,29,0.10) 100%)",
-    padding: "48px 40px 36px",
-    display: "grid",
-    gap: 32,
-    minHeight: 560,
-    alignContent: "space-between",
   },
-  heroOverlay: {
+  heroBg: {
     position: "absolute",
     inset: 0,
-    background:
-      "radial-gradient(circle at top right, rgba(185,28,28,0.10), transparent 32%)",
-    pointerEvents: "none",
+    backgroundSize: "cover",
+    backgroundPosition: "center",
+    transition: "opacity 0.9s ease",
   },
-  heroContent: {
+  heroBackdrop: {
+    position: "absolute",
+    inset: 0,
+    background: "linear-gradient(180deg, rgba(0,0,0,0.28) 0%, rgba(0,0,0,0.48) 100%)",
+  },
+  heroShade: {
+    position: "absolute",
+    inset: 0,
+    background: "radial-gradient(circle at top left, rgba(185,28,28,0.18), transparent 32%)",
+  },
+  heroInner: {
     position: "relative",
-    zIndex: 1,
-    maxWidth: 780,
+    zIndex: 2,
+    maxWidth: 1240,
+    margin: "0 auto",
+    padding: "72px 20px 88px",
     display: "grid",
     gap: 18,
   },
-  kicker: {
+  heroTopLine: {
+    color: "#ffffff",
     fontSize: 13,
     fontWeight: 700,
-    letterSpacing: 1.8,
-    color: "#b91c1c",
+    letterSpacing: 1.4,
   },
-  title: {
+  heroTitle: {
     margin: 0,
-    fontSize: "clamp(36px, 6vw, 62px)",
-    lineHeight: 1.05,
-    fontWeight: 700,
-    color: "#111111",
     maxWidth: 860,
+    color: "#ffffff",
+    fontSize: "clamp(34px, 6vw, 58px)",
+    lineHeight: 1.08,
+    fontWeight: 800,
   },
-  sub: {
+  heroDesc: {
     margin: 0,
-    color: "#555555",
-    fontSize: 16,
-    maxWidth: 680,
-    lineHeight: 1.8,
+    maxWidth: 760,
+    color: "rgba(255,255,255,0.9)",
+    fontSize: 17,
+    lineHeight: 1.7,
   },
-  actions: {
-    marginTop: 4,
+  searchPanel: {
+    marginTop: 8,
+    maxWidth: 980,
+    background: "#ffffff",
+    borderRadius: 24,
+    padding: 18,
+    boxShadow: "0 20px 50px rgba(0,0,0,0.18)",
+    display: "grid",
+    gap: 16,
+  },
+  searchTabs: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  searchTab: {
+    border: "none",
+    background: "#f1f3f5",
+    color: "#333333",
+    padding: "10px 16px",
+    borderRadius: 999,
+    fontSize: 14,
+    fontWeight: 700,
+    cursor: "pointer",
+  },
+  searchTabActive: {
+    background: "#b91c1c",
+    color: "#ffffff",
+  },
+  searchBoxWrap: {
+    width: "100%",
+  },
+  heroActions: {
     display: "flex",
     flexWrap: "wrap",
     gap: 14,
+    marginTop: 10,
   },
   primaryBtn: {
+    textDecoration: "none",
     background: "#b91c1c",
     color: "#ffffff",
-    textDecoration: "none",
     padding: "14px 22px",
-    borderRadius: 999,
+    borderRadius: 12,
     fontWeight: 700,
     fontSize: 15,
-    boxShadow: "0 12px 30px rgba(185, 28, 28, 0.18)",
+    boxShadow: "0 12px 28px rgba(185,28,28,0.25)",
   },
   secondaryBtn: {
-    background: "#ffffff",
-    color: "#111111",
     textDecoration: "none",
+    background: "rgba(255,255,255,0.12)",
+    color: "#ffffff",
     padding: "14px 22px",
-    borderRadius: 999,
+    borderRadius: 12,
     fontWeight: 700,
     fontSize: 15,
-    border: "1px solid #d9d9d9",
+    border: "1px solid rgba(255,255,255,0.25)",
+    backdropFilter: "blur(4px)",
   },
 
-  heroStats: {
-    position: "relative",
-    zIndex: 1,
+  section: {
+    maxWidth: 1240,
+    margin: "48px auto 0",
+    padding: "0 20px",
     display: "grid",
-    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-    gap: 16,
-  },
-  statCard: {
-    background: "rgba(255,255,255,0.78)",
-    border: "1px solid #ececec",
-    borderRadius: 24,
-    padding: "20px 18px",
-    backdropFilter: "blur(8px)",
-    display: "grid",
-    gap: 8,
-  },
-  statNumber: {
-    fontSize: 18,
-    fontWeight: 700,
-    color: "#111111",
-  },
-  statLabel: {
-    fontSize: 14,
-    lineHeight: 1.6,
-    color: "#666666",
-  },
-
-  introSection: {
-    display: "grid",
-    gap: 22,
+    gap: 18,
   },
   sectionHeader: {
     display: "grid",
     gap: 8,
   },
+  sectionHeaderRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "end",
+    gap: 16,
+    flexWrap: "wrap",
+  },
   sectionKicker: {
-    fontSize: 13,
-    fontWeight: 700,
-    letterSpacing: 1.4,
     color: "#b91c1c",
+    fontSize: 13,
+    fontWeight: 800,
+    letterSpacing: 1.2,
   },
   sectionTitle: {
     margin: 0,
-    fontSize: 30,
+    fontSize: 32,
     lineHeight: 1.2,
-    fontWeight: 700,
-    color: "#111111",
-    maxWidth: 760,
+    fontWeight: 800,
+    color: "#111827",
   },
-
-  introGrid: {
-    display: "grid",
-    gridTemplateColumns: "minmax(0, 1.2fr) repeat(2, minmax(0, 0.8fr))",
-    gap: 20,
-  },
-  introCardLarge: {
-    background: "#ffffff",
-    border: "1px solid #ececec",
-    borderRadius: 28,
-    padding: 28,
-    boxShadow: "0 16px 40px rgba(0,0,0,0.04)",
-    display: "grid",
-    gap: 14,
-  },
-  introCard: {
-    background: "#ffffff",
-    border: "1px solid #ececec",
-    borderRadius: 28,
-    padding: 24,
-    boxShadow: "0 16px 40px rgba(0,0,0,0.04)",
-    display: "grid",
-    alignContent: "start",
-    gap: 12,
-  },
-  cardTag: {
-    fontSize: 12,
-    fontWeight: 700,
+  viewAllLink: {
+    textDecoration: "none",
     color: "#b91c1c",
-    letterSpacing: 0.8,
-  },
-  cardTitle: {
-    margin: 0,
-    fontSize: 28,
-    lineHeight: 1.25,
+    fontSize: 15,
     fontWeight: 700,
-    color: "#111111",
-  },
-  cardDesc: {
-    margin: 0,
-    fontSize: 15,
-    lineHeight: 1.75,
-    color: "#666666",
-  },
-  smallCardText: {
-    margin: 0,
-    fontSize: 15,
-    lineHeight: 1.75,
-    color: "#666666",
   },
 
-  navigationSection: {
+  areaGrid: {
     display: "grid",
-    gap: 22,
+    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+    gap: 18,
   },
-  navigationGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-    gap: 20,
-  },
-  navCard: {
+  areaCard: {
     textDecoration: "none",
     color: "inherit",
     background: "#ffffff",
-    border: "1px solid #ececec",
-    borderRadius: 28,
-    padding: 28,
-    boxShadow: "0 16px 40px rgba(0,0,0,0.04)",
+    border: "1px solid #edf0f3",
+    borderRadius: 20,
+    padding: 22,
+    boxShadow: "0 14px 36px rgba(15,23,42,0.05)",
     display: "grid",
-    gap: 12,
+    gap: 10,
   },
-  navCardTag: {
-    width: 42,
-    height: 42,
-    borderRadius: 999,
-    display: "grid",
-    placeItems: "center",
-    background: "#fef2f2",
-    color: "#b91c1c",
-    fontWeight: 700,
+  areaName: {
+    fontSize: 22,
+    fontWeight: 800,
+    color: "#111827",
+  },
+  areaMeta: {
     fontSize: 14,
+    color: "#5b6472",
   },
-  navCardTitle: {
-    margin: 0,
-    fontSize: 26,
-    lineHeight: 1.25,
-    fontWeight: 700,
-    color: "#111111",
-  },
-  navCardDesc: {
-    margin: 0,
-    fontSize: 15,
-    lineHeight: 1.75,
-    color: "#666666",
-  },
-  navCardLink: {
-    marginTop: 6,
+  areaLink: {
+    marginTop: 8,
     fontSize: 14,
     fontWeight: 700,
     color: "#b91c1c",
   },
 
-  ctaSection: {
+  projectGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+    gap: 20,
+  },
+  projectCard: {
+    textDecoration: "none",
+    color: "inherit",
+    background: "#ffffff",
+    borderRadius: 20,
+    overflow: "hidden",
+    border: "1px solid #edf0f3",
+    boxShadow: "0 14px 36px rgba(15,23,42,0.05)",
     display: "grid",
   },
+  projectThumb: {
+    height: 220,
+    backgroundSize: "cover",
+    backgroundPosition: "center",
+    backgroundRepeat: "no-repeat",
+  },
+  projectBody: {
+    padding: 18,
+    display: "grid",
+    gap: 10,
+  },
+  projectType: {
+    fontSize: 12,
+    fontWeight: 800,
+    color: "#b91c1c",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+  },
+  projectTitle: {
+    margin: 0,
+    fontSize: 22,
+    lineHeight: 1.3,
+    fontWeight: 800,
+    color: "#111827",
+  },
+  projectLocation: {
+    fontSize: 14,
+    color: "#6b7280",
+  },
+  projectDesc: {
+    margin: 0,
+    fontSize: 14,
+    lineHeight: 1.7,
+    color: "#5b6472",
+  },
+  projectLink: {
+    marginTop: 8,
+    fontSize: 14,
+    fontWeight: 700,
+    color: "#b91c1c",
+  },
+
+  newsGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+    gap: 20,
+  },
+  newsCard: {
+    textDecoration: "none",
+    color: "inherit",
+    background: "#ffffff",
+    borderRadius: 20,
+    overflow: "hidden",
+    border: "1px solid #edf0f3",
+    boxShadow: "0 14px 36px rgba(15,23,42,0.05)",
+    display: "grid",
+  },
+  newsThumb: {
+    height: 190,
+    backgroundSize: "cover",
+    backgroundPosition: "center",
+    backgroundRepeat: "no-repeat",
+  },
+  newsBody: {
+    padding: 18,
+    display: "grid",
+    gap: 10,
+  },
+  newsDate: {
+    fontSize: 13,
+    color: "#6b7280",
+  },
+  newsTitle: {
+    margin: 0,
+    fontSize: 20,
+    lineHeight: 1.35,
+    fontWeight: 800,
+    color: "#111827",
+  },
+  newsSummary: {
+    margin: 0,
+    fontSize: 14,
+    lineHeight: 1.7,
+    color: "#5b6472",
+  },
+  newsLink: {
+    marginTop: 8,
+    fontSize: 14,
+    fontWeight: 700,
+    color: "#b91c1c",
+  },
+
+  emptyCard: {
+    background: "#ffffff",
+    borderRadius: 20,
+    padding: 22,
+    border: "1px solid #edf0f3",
+    color: "#5b6472",
+  },
+
+  ctaSection: {
+    maxWidth: 1240,
+    margin: "48px auto 0",
+    padding: "0 20px",
+  },
   ctaBox: {
-    background:
-      "linear-gradient(135deg, #111111 0%, #1f1f1f 55%, #7f1d1d 100%)",
-    borderRadius: 32,
-    padding: "42px 36px",
+    borderRadius: 28,
+    padding: "40px 32px",
+    background: "linear-gradient(135deg, #111827 0%, #1f2937 60%, #7f1d1d 100%)",
     display: "grid",
     gap: 14,
+  },
+  sectionKickerLight: {
+    color: "rgba(255,255,255,0.82)",
+    fontSize: 13,
+    fontWeight: 800,
+    letterSpacing: 1.2,
   },
   ctaTitle: {
     margin: 0,
     fontSize: 34,
     lineHeight: 1.18,
-    fontWeight: 700,
+    fontWeight: 800,
     color: "#ffffff",
     maxWidth: 760,
   },
   ctaDesc: {
     margin: 0,
+    color: "rgba(255,255,255,0.82)",
     fontSize: 15,
     lineHeight: 1.75,
-    color: "rgba(255,255,255,0.78)",
-    maxWidth: 720,
+    maxWidth: 760,
+  },
+  ctaActions: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 14,
+    marginTop: 8,
+  },
+  ctaPrimaryBtn: {
+    textDecoration: "none",
+    background: "#ffffff",
+    color: "#111827",
+    padding: "14px 22px",
+    borderRadius: 12,
+    fontWeight: 800,
+    fontSize: 15,
+  },
+  ctaSecondaryBtn: {
+    textDecoration: "none",
+    background: "transparent",
+    color: "#ffffff",
+    padding: "14px 22px",
+    borderRadius: 12,
+    fontWeight: 800,
+    fontSize: 15,
+    border: "1px solid rgba(255,255,255,0.24)",
   },
 };

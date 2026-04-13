@@ -4,7 +4,7 @@ import { useAuth } from "../app/AuthContext";
 function getDefaultRedirect(roles: string[]) {
   if (roles.includes("admin")) return "/admin/dashboard";
   if (roles.includes("seller")) return "/seller/dashboard";
-  return "/user";
+  return "/";
 }
 
 export default function RoleRoute({

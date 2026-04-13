@@ -107,8 +107,8 @@ export default function PropertyDetailPage() {
         </button>
 
         <button onClick={handleSave} style={styles.saveBtn}>
-          ❤️ Lưu quan tâm
-        </button>
+          ❤️ Thêm giỏ hàng
+          </button>
       </div>
 
       <section style={styles.hero}>

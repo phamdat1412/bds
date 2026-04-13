@@ -69,8 +69,12 @@ export async function createLeadApi(payload: {
   note?: string;
   interestedProjectId?: string;
 }) {
-  const response = await api.post("/leads", payload);
-  return response.data;
+  const response = await api.post("/public/leads", payload);
+  return response.data as {
+    success: boolean;
+    message: string;
+    data: LeadItem;
+  };
 }
 
 export async function updateLeadApi(

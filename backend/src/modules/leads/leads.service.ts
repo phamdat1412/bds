@@ -9,20 +9,25 @@ import type {
   UpdateLeadStatusInput,
 } from "./leads.types.js";
 
-type LeadActor = {
-  userId: string;
-  roles?: string[];
-};
+type LeadActor =
+  | {
+      userId: string;
+      roles?: string[];
+    }
+  | null;
 
 function isAdmin(actor: LeadActor) {
-  return (actor.roles || []).includes("admin");
+  return !!actor && (actor.roles || []).includes("admin");
 }
 
 function isSeller(actor: LeadActor) {
-  return (actor.roles || []).includes("seller");
+  return !!actor && (actor.roles || []).includes("seller");
 }
 
-async function ensureLeadAccessible(leadId: string, actor: LeadActor) {
+async function ensureLeadAccessible(
+  leadId: string,
+  actor: Exclude<LeadActor, null>
+) {
   const leadIdBigInt = BigInt(leadId);
 
   const lead = await prisma.lead.findUnique({
@@ -93,10 +98,7 @@ function mapLeadDetail(lead: {
   };
 }
 
-export async function createLead(
-  input: CreateLeadInput,
-  actor: LeadActor
-) {
+export async function createLead(input: CreateLeadInput, actor: LeadActor) {
   let interestedProjectIdBigInt: bigint | undefined = undefined;
 
   if (input.interestedProjectId) {
@@ -121,7 +123,7 @@ export async function createLead(
         channel: input.channel?.trim() || null,
         note: input.note?.trim() || null,
         interestedProjectId: interestedProjectIdBigInt,
-        createdByUserId: BigInt(actor.userId),
+        createdByUserId: actor ? BigInt(actor.userId) : null,
         status: "new",
       },
       include: {
@@ -130,7 +132,7 @@ export async function createLead(
       },
     });
 
-    if (isSeller(actor)) {
+    if (actor && isSeller(actor)) {
       await tx.leadAssignment.create({
         data: {
           leadId: lead.id,
@@ -150,7 +152,7 @@ export async function createLead(
 
 export async function listLeads(
   query: LeadListQuery,
-  actor: LeadActor
+  actor: Exclude<LeadActor, null>
 ) {
   const keyword = query.keyword?.trim() || undefined;
   const page = query.page || 1;
@@ -250,7 +252,10 @@ export async function listLeads(
   };
 }
 
-export async function getLeadDetail(leadId: string, actor: LeadActor) {
+export async function getLeadDetail(
+  leadId: string,
+  actor: Exclude<LeadActor, null>
+) {
   await ensureLeadAccessible(leadId, actor);
 
   const lead = await prisma.lead.findUnique({
@@ -349,7 +354,7 @@ export async function getLeadDetail(leadId: string, actor: LeadActor) {
 export async function updateLeadStatus(
   leadId: string,
   input: UpdateLeadStatusInput,
-  actor: LeadActor
+  actor: Exclude<LeadActor, null>
 ) {
   await ensureLeadAccessible(leadId, actor);
 
@@ -445,7 +450,7 @@ export async function assignLead(
 export async function createLeadActivity(
   leadId: string,
   input: CreateLeadActivityInput,
-  actor: LeadActor
+  actor: Exclude<LeadActor, null>
 ) {
   await ensureLeadAccessible(leadId, actor);
 
@@ -481,7 +486,7 @@ export async function createLeadActivity(
 export async function updateLead(
   leadId: string,
   input: UpdateLeadInput,
-  actor: LeadActor
+  actor: Exclude<LeadActor, null>
 ) {
   await ensureLeadAccessible(leadId, actor);
 
